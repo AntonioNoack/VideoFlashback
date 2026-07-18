@@ -191,7 +191,6 @@ void VideoEncoder::thread_main()
 
         int64_t relative_ns = frame.timestamp_ns - first_timestamp_ns;
 
-        // 60 fps-hack, timebase is 90kHz
         avframe->pts = av_rescale_q(
             relative_ns,
             AVRational{1,1000000000},
