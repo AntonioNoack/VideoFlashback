@@ -315,7 +315,7 @@ void Capture::on_stream_process(void* data)
     }
 
 
-    if (spa_data_ptr->data) {
+    if (false && spa_data_ptr->data) {
         std::cout
             << "Frame "
             << self->video_width

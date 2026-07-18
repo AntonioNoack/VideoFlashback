@@ -25,6 +25,7 @@ add_executable(replay
     src/ScreenCast.cpp
     src/RingBuffer.cpp
     src/Encoder.cpp
+    src/ReplayWriter.cpp
 )
 
 target_include_directories(replay PRIVATE
@@ -32,6 +33,7 @@ target_include_directories(replay PRIVATE
     ${DBUS_INCLUDE_DIRS}
     ${AVCODEC_INCLUDE_DIRS}
     ${AVUTIL_INCLUDE_DIRS}
+    ${AVFORMAT_INCLUDE_DIRS}
 )
 
 target_link_libraries(replay PRIVATE
@@ -39,6 +41,7 @@ target_link_libraries(replay PRIVATE
     ${DBUS_LIBRARIES}
     ${AVCODEC_LIBRARIES}
     ${AVUTIL_LIBRARIES}
+    ${AVFORMAT_LIBRARIES}
     ${SWSCALE_LIBRARIES}
     Threads::Threads
 )

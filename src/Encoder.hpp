@@ -27,38 +27,26 @@ class Encoder
 {
 public:
 
-    Encoder(
-        RingBuffer& buffer);
-
-
+    Encoder(RingBuffer& buffer);
     ~Encoder();
 
+    bool initialize(int width, int height);
+    void push(RawFrame frame);
 
-    bool initialize(
-        int width,
-        int height);
-
-
-    void push(
-        RawFrame frame);
-
+    void set_video_info();
 
 private:
 
     void thread_main();
-
+    void update_video_info();
 
 private:
 
     RingBuffer& ring;
 
-
     std::thread thread;
-
     std::mutex mutex;
-
     std::condition_variable condition;
-
 
     std::queue<RawFrame> frames;
 

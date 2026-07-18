@@ -75,6 +75,23 @@ bool Encoder::initialize(
         encoder,
         nullptr);
 
+    VideoInfo info;
+    info.width = codec->width;
+    info.height = codec->height;
+    info.time_base_num = codec->time_base.num;
+    info.time_base_den = codec->time_base.den;
+
+    if (codec->extradata &&
+        codec->extradata_size > 0)
+    {
+        info.extradata.assign(
+            codec->extradata,
+            codec->extradata +
+            codec->extradata_size);
+    }
+
+    ring.set_video_info(info);
+
     scaler = sws_getContext(
             width,
             height,
@@ -177,12 +194,8 @@ void Encoder::thread_main()
             avframe->data,
             avframe->linesize);
 
-
-
-        avframe->pts =
-            frame_number++;
-
-
+        // 60 fps-hack, timebase is 90kHz
+        avframe->pts = 1500 * frame_number++;
 
         if (avcodec_send_frame(
                 codec,
@@ -220,11 +233,15 @@ void Encoder::thread_main()
 
         av_frame_free(&avframe);
 
-        std::cout
-            << "Encoding frame "
-            << frame.width
-            << "x"
-            << frame.height
-            << "\n";
+        if (frame_number % 10 == 0) {
+            std::cout
+                << "Encoding frame "
+                << frame_number
+                << ": "
+                << frame.width
+                << "x"
+                << frame.height
+                << "\n";
+        }
     }
 }

@@ -1,5 +1,6 @@
 #include "RingBuffer.hpp"
 
+#include <iostream>
 
 RingBuffer::RingBuffer(int64_t duration_seconds)
     : duration(duration_seconds)
@@ -13,26 +14,22 @@ void RingBuffer::push(
 {
     std::lock_guard lock(mutex);
 
+    std::cout
+        << "Ring packet "
+        << packet.data.size()
+        << " bytes\n";
 
-    newest_pts =
-        packet.pts;
-
-
-    packets.push_back(
-        std::move(packet));
-
+    newest_pts = packet.pts;
+    packets.push_back(std::move(packet));
 
     trim();
 }
-
-
 
 void RingBuffer::trim()
 {
     int64_t cutoff =
         newest_pts -
-        duration * 90000; // 90k is the standard FFMPEG timebase according to Chatchy
-
+        duration * time_base;
 
     while (!packets.empty() &&
            packets.front().pts < cutoff)
@@ -41,16 +38,37 @@ void RingBuffer::trim()
     }
 }
 
-
-
 std::vector<EncodedPacket>
 RingBuffer::snapshot()
 {
     std::lock_guard lock(mutex);
 
 
+    auto start = packets.begin();
+    while (start != packets.end() &&
+        !start->keyframe)
+    {
+        ++start;
+    }
+
     return {
-        packets.begin(),
+        start,
         packets.end()
     };
+}
+
+void RingBuffer::set_video_info(
+    const VideoInfo& info)
+{
+    std::lock_guard lock(mutex);
+
+    video_info = info;
+}
+
+
+VideoInfo RingBuffer::get_video_info()
+{
+    std::lock_guard lock(mutex);
+
+    return video_info;
 }

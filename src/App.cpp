@@ -1,10 +1,14 @@
 #include "App.hpp"
 #include "Capture.hpp"
 #include "Encoder.hpp"
+#include "ReplayWriter.hpp"
 #include "RingBuffer.hpp"
 #include "ScreenCast.hpp"
 
 #include <iostream>
+
+#include <thread>
+#include <chrono>
 
 int App::run()
 {
@@ -12,6 +16,7 @@ int App::run()
 
     RingBuffer buffer(30);
     Encoder encoder(buffer);
+    ReplayWriter writer;
 
     ScreenCast screen;
     if (!screen.initialize()) {
@@ -52,11 +57,20 @@ int App::run()
     );
     capture.connect_to_node(node);
 
+    std::thread capture_thread(
+        [&capture]() {
+            bool running = true;
+            while (running) {
+                capture.update();
+            }
+        }
+    );
 
-    bool running = true;
-    while (running) {
-        capture.update();
-    }
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+
+    writer.write("replay.mp4", buffer);
+
+    capture_thread.detach();
 
     return 0;
 }
