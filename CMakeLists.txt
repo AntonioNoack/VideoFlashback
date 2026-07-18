@@ -21,7 +21,6 @@ pkg_check_modules(SWSCALE REQUIRED libswscale)
 
 add_executable(replay
     src/main.cpp
-    src/App.cpp
     src/AudioCapture.cpp
     src/AudioEncoder.cpp
     src/VideoCapture.cpp
@@ -52,3 +51,5 @@ target_link_libraries(replay PRIVATE
     ${X11_LIBRARIES}
     Threads::Threads
 )
+
+add_executable(replay-trigger src/trigger.cpp)
