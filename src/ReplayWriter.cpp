@@ -107,6 +107,7 @@ bool ReplayWriter::write(
         audio_stream->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
         audio_stream->codecpar->codec_id = AV_CODEC_ID_AAC;
         audio_stream->codecpar->sample_rate = audioInfo.sampleRate;
+        audio_stream->codecpar->frame_size = audioInfo.frame_size;
         av_channel_layout_default(&audio_stream->codecpar->ch_layout, audioInfo.channels);
 
         audio_stream->time_base =

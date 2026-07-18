@@ -70,6 +70,7 @@ bool AudioEncoder::initialize(
     AudioInfo info;
     info.sampleRate = sampleRate;
     info.channels = channels;
+    info.frame_size = codec->frame_size;
     info.time_base_num = codec->time_base.num;
     info.time_base_den = codec->time_base.den;
 
