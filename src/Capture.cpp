@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include <spa/param/video/format-utils.h>
+#include <pipewire/pipewire.h>
 
 #include "Capture.hpp"
 
@@ -325,20 +326,32 @@ void Capture::on_stream_process(void* data)
                     sizeof(spa_meta_header)));
 
 
+        struct pw_time time;
         if (header) {
             timestamp = header->pts;
 
+            /*std::cout
+                << "PipeWire header timestamp "
+                << timestamp
+                << "\n";*/
+                
+        } else if (false && pw_stream_get_time_n(
+            self->stream,
+            &time, sizeof(time)) == 0) // todo bug: this produces 0
+        {
+            timestamp = time.now;
+
             std::cout
-                << "PipeWire timestamp "
+                << "PipeWire clock timestamp "
                 << timestamp
                 << "\n";
         } else {
             timestamp = now_nanoseconds();
 
-            std::cout
+            /*std::cout
                 << "Chrono timestamp "
                 << timestamp
-                << "\n";
+                << "\n";*/
         }
 
         self->frame_callback(

@@ -14,7 +14,7 @@ void RingBuffer::push(
 {
     std::lock_guard lock(mutex);
 
-    std::cout
+    if (false) std::cout
         << "Ring packet "
         << packet.data.size()
         << " bytes\n";

@@ -207,6 +207,8 @@ void Encoder::thread_main()
             AVRational{1,1000000000},
             codec->time_base);
 
+        // std::cout << "pts: " << avframe->pts << std::endl;
+
         if (avcodec_send_frame(
                 codec,
                 avframe) >= 0)

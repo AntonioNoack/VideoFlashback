@@ -16,9 +16,16 @@ struct VideoInfo
     std::vector<uint8_t> extradata;
 };
 
+enum class StreamType
+{
+    Video,
+    Audio
+};
+
 
 struct EncodedPacket
 {
+    StreamType type;
     std::vector<uint8_t> data;
 
     int64_t pts = 0;

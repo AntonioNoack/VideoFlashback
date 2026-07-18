@@ -1,6 +1,7 @@
 #include "App.hpp"
 #include "Capture.hpp"
 #include "Encoder.hpp"
+#include "Hotkey.hpp"
 #include "ReplayWriter.hpp"
 #include "RingBuffer.hpp"
 #include "ScreenCast.hpp"
@@ -14,9 +15,15 @@ int App::run()
 {
     std::cout << "Replay recorder\n";
 
-    RingBuffer buffer(30);
-    Encoder encoder(buffer);
+    RingBuffer videoBuffer(30);
+    Encoder encoder(videoBuffer);
     ReplayWriter writer;
+
+    Hotkey hotkey;
+    if(!hotkey.initialize()) {
+        std::cerr << "Hotkey failed\n";
+        return 1;
+    }
 
     ScreenCast screen;
     if (!screen.initialize()) {
@@ -58,20 +65,40 @@ int App::run()
     );
     capture.connect_to_node(node);
 
-    std::thread capture_thread(
-        [&capture]() {
+    volatile bool save_requested = false;
+    /*std::thread capture_thread(
+        [&capture, &writer, &hotkey, &save_requested]() {*/
             bool running = true;
             while (running) {
                 capture.update();
+                
+                if (hotkey.pressed()) {
+                    save_requested = true;
+                    std::cout << "Hotkey pressed, writing file" << std::endl;
+                    writer.write("replay.mp4", videoBuffer/*, audioBuffer*/);
+                }
             }
+    // });
+
+    /*std::thread writer_thread(
+        [&writer, &save_requested, &videoBuffer, &audioBuffer]() {
+            bool running = true;
+            while (running)
+            {
+                if (save_requested) {
+                    save_requested = false;
+                    writer.write("replay.mp4", videoBuffer, audioBuffer);
+                }
+            }
+            
         }
-    );
+    )*/
 
-    std::this_thread::sleep_for(std::chrono::seconds(10));
+    /*std::this_thread::sleep_for(std::chrono::seconds(10));
 
-    writer.write("replay.mp4", buffer);
+    writer.write("replay.mp4", videoBuffer);
 
-    capture_thread.detach();
+    capture_thread.detach();*/
 
     return 0;
 }
