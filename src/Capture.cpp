@@ -224,8 +224,40 @@ void Capture::on_stream_param_changed(
     uint32_t id,
     const struct spa_pod* param)
 {
-    std::cout << "Stream format changed\n";
+    auto* self =
+        static_cast<Capture*>(data);
+
+    if (!param) return;
+
+
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    if (spa_format_video_raw_parse(
+            param,
+            &self->video_format) < 0)
+    {
+        std::cout
+            << "Could not parse video format\n";
+
+        return;
+    }
+
+
+    width = self->video_format.info.raw.size.width;
+    height = self->video_format.info.raw.size.height;
+
+    self->video_width = width;
+    self->video_height = height;
+
+    std::cout
+        << "Video format "
+        << width
+        << "x"
+        << height
+        << "\n";
 }
+
 
 void Capture::on_stream_process(void* data)
 {
@@ -245,4 +277,41 @@ void Capture::on_stream_process(void* data)
     pw_stream_queue_buffer(
         self->stream,
         buffer);
+}
+
+bool Capture::connect_to_node(
+    uint32_t node_id)
+{
+    if (!stream)
+        return false;
+
+
+    int result =
+        pw_stream_connect(
+            stream,
+            PW_DIRECTION_INPUT,
+            node_id,
+            static_cast<pw_stream_flags>(
+                PW_STREAM_FLAG_AUTOCONNECT |
+                PW_STREAM_FLAG_MAP_BUFFERS),
+            nullptr,
+            0);
+
+
+    if (result < 0)
+    {
+        std::cerr
+            << "Failed connecting stream: "
+            << result
+            << "\n";
+
+        return false;
+    }
+
+
+    std::cout
+        << "PipeWire stream connected\n";
+
+
+    return true;
 }

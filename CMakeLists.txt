@@ -21,13 +21,16 @@ add_executable(replay
     src/main.cpp
     src/App.cpp
     src/Capture.cpp
+    src/ScreenCast.cpp
 )
 
 target_include_directories(replay PRIVATE
     ${PIPEWIRE_INCLUDE_DIRS}
+    ${DBUS_INCLUDE_DIRS}
 )
 
 target_link_libraries(replay PRIVATE
     ${PIPEWIRE_LIBRARIES}
+    ${DBUS_LIBRARIES}
     Threads::Threads
 )

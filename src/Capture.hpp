@@ -1,6 +1,8 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
+#include <vector>
+
 #include <spa/utils/dict.h>
 #include <pipewire/pipewire.h>
 
@@ -10,6 +12,18 @@ struct pw_core;
 struct pw_registry;
 struct spa_hook;
 
+
+struct Frame
+{
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t stride = 0;
+
+    uint64_t timestamp = 0;
+
+    std::vector<uint8_t> data;
+};
+
 class Capture
 {
 public:
@@ -18,6 +32,8 @@ public:
     bool initialize();
     void update();
     void shutdown();
+
+    bool connect_to_node(uint32_t node_id);
 
     static void on_stream_state_changed(
         void* data,
@@ -53,4 +69,10 @@ private:
     pw_stream* stream = nullptr;
 
     spa_hook registry_listener;
+
+private:
+
+    uint32_t video_width = 0;
+    uint32_t video_height = 0;
+    uint32_t video_stride = 0;
 };
