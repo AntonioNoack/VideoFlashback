@@ -14,6 +14,7 @@ pkg_check_modules(AVUTIL REQUIRED libavutil)
 pkg_check_modules(SWSCALE REQUIRED libswscale)
 pkg_check_modules(SWRESAMPLE REQUIRED libswresample)
 pkg_check_modules(DBUS REQUIRED dbus-1)
+pkg_check_modules(SWSCALE REQUIRED libswscale)
 
 find_package(Threads REQUIRED)
 
@@ -22,15 +23,22 @@ add_executable(replay
     src/App.cpp
     src/Capture.cpp
     src/ScreenCast.cpp
+    src/RingBuffer.cpp
+    src/Encoder.cpp
 )
 
 target_include_directories(replay PRIVATE
     ${PIPEWIRE_INCLUDE_DIRS}
     ${DBUS_INCLUDE_DIRS}
+    ${AVCODEC_INCLUDE_DIRS}
+    ${AVUTIL_INCLUDE_DIRS}
 )
 
 target_link_libraries(replay PRIVATE
     ${PIPEWIRE_LIBRARIES}
     ${DBUS_LIBRARIES}
+    ${AVCODEC_LIBRARIES}
+    ${AVUTIL_LIBRARIES}
+    ${SWSCALE_LIBRARIES}
     Threads::Threads
 )
