@@ -1,6 +1,7 @@
 #include "Capture.hpp"
 
 #include <iostream>
+#include <spa/param/video/format-utils.h>
 
 static const pw_stream_events stream_events =
 {
@@ -244,8 +245,8 @@ void Capture::on_stream_param_changed(
     }
 
 
-    width = self->video_format.info.raw.size.width;
-    height = self->video_format.info.raw.size.height;
+    width = self->video_format.size.width;
+    height = self->video_format.size.height;
 
     self->video_width = width;
     self->video_height = height;
@@ -271,7 +272,59 @@ void Capture::on_stream_process(void* data)
         return;
 
 
-    std::cout << "Frame received\n";
+    spa_buffer* spa_buffer = buffer->buffer;
+
+
+    if (!spa_buffer ||
+        spa_buffer->n_datas == 0)
+    {
+        pw_stream_queue_buffer(
+            self->stream,
+            buffer);
+
+        return;
+    }
+
+
+    spa_data* spa_data_ptr =
+        &spa_buffer->datas[0];
+
+
+    if (!spa_data_ptr->data)
+    {
+        pw_stream_queue_buffer(
+            self->stream,
+            buffer);
+
+        return;
+    }
+
+    if (self->frame_callback &&
+        spa_data_ptr->data &&
+        spa_data_ptr->chunk)
+    {
+        self->frame_callback(
+            static_cast<uint8_t*>(spa_data_ptr->data),
+
+            self->video_width,
+            self->video_height,
+
+            spa_data_ptr->chunk->stride,
+
+            /*spa_buffer->pts*/ 0);
+    }
+
+
+    if (spa_data_ptr->data) {
+        std::cout
+            << "Frame "
+            << self->video_width
+            << "x"
+            << self->video_height
+            << " bytes="
+            << spa_data_ptr->chunk->size
+            << "\n";
+    }
 
 
     pw_stream_queue_buffer(
@@ -314,4 +367,10 @@ bool Capture::connect_to_node(
 
 
     return true;
+}
+
+void Capture::set_frame_callback(
+    FrameCallback callback)
+{
+    frame_callback = std::move(callback);
 }

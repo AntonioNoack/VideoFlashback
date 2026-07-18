@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
+#include <spa/param/video/raw.h>
 #include <spa/utils/dict.h>
 #include <pipewire/pipewire.h>
 
@@ -11,7 +13,6 @@ struct pw_context;
 struct pw_core;
 struct pw_registry;
 struct spa_hook;
-
 
 struct Frame
 {
@@ -24,6 +25,14 @@ struct Frame
     std::vector<uint8_t> data;
 };
 
+using FrameCallback =
+    std::function<void(
+        const uint8_t* data,
+        uint32_t width,
+        uint32_t height,
+        uint32_t stride,
+        uint64_t timestamp)>;
+
 class Capture
 {
 public:
@@ -34,6 +43,8 @@ public:
     void shutdown();
 
     bool connect_to_node(uint32_t node_id);
+
+    void set_frame_callback(FrameCallback callback);
 
     static void on_stream_state_changed(
         void* data,
@@ -75,4 +86,9 @@ private:
     uint32_t video_width = 0;
     uint32_t video_height = 0;
     uint32_t video_stride = 0;
+
+    FrameCallback frame_callback;
+
+struct spa_video_info_raw video_format{};
+
 };
