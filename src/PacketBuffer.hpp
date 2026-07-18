@@ -19,6 +19,7 @@ struct VideoInfo
 struct AudioInfo
 {
     int sampleRate = 48000;
+    int channels = 2;
 
     int time_base_num = 1;
     int time_base_den = 90000;

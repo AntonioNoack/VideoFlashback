@@ -12,6 +12,47 @@
 
 #include <thread>
 #include <chrono>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstdio>
+#include <cctype>
+
+static uint32_t get_default_sink_id() {
+    FILE* fp = popen("wpctl status", "r");
+    if (!fp) return 0;
+    char line[512];
+    bool in_sinks = false;
+    uint32_t sink_id = 0;
+    while (fgets(line, sizeof(line), fp)) {
+        std::string s(line);
+        if (s.find("Sinks:") != std::string::npos) {
+            in_sinks = true;
+            continue;
+        }
+        if (in_sinks) {
+            if (s.find("Sink endpoints:") != std::string::npos ||
+                s.find("Sources:") != std::string::npos ||
+                s.find("Devices:") != std::string::npos) {
+                break;
+            }
+            if (s.find('*') != std::string::npos) {
+                size_t idx = s.find('*');
+                while (idx < s.size() && !std::isdigit(static_cast<unsigned char>(s[idx]))) {
+                    idx++;
+                }
+                if (idx < s.size()) {
+                    try {
+                        sink_id = std::stoul(s.substr(idx));
+                    } catch (...) {
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    pclose(fp);
+    return sink_id;
+}
 
 int App::run()
 {
@@ -24,10 +65,13 @@ int App::run()
 
     ReplayWriter writer;
 
+    bool use_stdin_fallback = false;
     Hotkey hotkey;
     if(!hotkey.initialize("/dev/input/event3")) {
-        std::cerr << "Hotkey failed\n";
-        return 1;
+        std::cerr << "Hotkey initialization failed. Pressing Enter in the console will be used to trigger saves instead.\n";
+        use_stdin_fallback = true;
+        int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+        fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
     }
 
     ScreenCast screen;
@@ -95,21 +139,51 @@ int App::run()
 
             audioEncoder.push(std::move(frame));
         });
-    audioCapture.connect_to_node(node);
+    uint32_t audio_node = PW_ID_ANY;
+    uint32_t default_sink = get_default_sink_id();
+    if (default_sink != 0) {
+        audio_node = default_sink;
+        std::cout << "Targeting default audio sink monitor (node ID: " << default_sink << ")\n";
+    } else {
+        std::cout << "Could not detect default sink ID, falling back to default capture source.\n";
+    }
+    audioCapture.connect_to_node(audio_node);
 
     volatile bool save_requested = false;
     /*std::thread capture_thread(
         [&videoCapture, &writer, &hotkey, &save_requested]() {*/
+            auto start_time = std::chrono::steady_clock::now();
             bool running = true;
+            std::cout << "Capture started. Capturing for 10 seconds, then saving automatically to replay.mp4 and exiting...\n";
             while (running) {
                 audioCapture.update();
                 videoCapture.update();
                 
-                if (hotkey.pressed()) {
-                    save_requested = true;
-                    std::cout << "Hotkey pressed, writing file" << std::endl;
-                    writer.write("replay.mp4", buffer/*, audioBuffer*/);
+                bool triggered = false;
+                if (use_stdin_fallback) {
+                    char dummy;
+                    if (read(STDIN_FILENO, &dummy, 1) > 0) {
+                        triggered = true;
+                    }
+                } else {
+                    triggered = hotkey.pressed();
                 }
+
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - start_time).count();
+                if (elapsed >= 10) {
+                    triggered = true;
+                    running = false;
+                    std::cout << "10 seconds elapsed. Saving automatically...\n";
+                }
+
+                if (triggered) {
+                    save_requested = true;
+                    std::cout << "Triggered! Writing replay.mp4..." << std::endl;
+                    writer.write("replay.mp4", buffer);
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
     // });
 

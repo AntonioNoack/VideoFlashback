@@ -26,6 +26,7 @@ add_executable(replay
     src/AudioEncoder.cpp
     src/VideoCapture.cpp
     src/VideoEncoder.cpp
+    src/EncoderWorker.cpp
     src/ScreenCast.cpp
     src/PacketBuffer.cpp
     src/ReplayWriter.cpp

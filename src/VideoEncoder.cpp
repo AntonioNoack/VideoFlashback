@@ -213,7 +213,7 @@ void VideoEncoder::thread_main()
                     packet) == 0)
             {
                 EncodedPacket out;
-
+                out.type = StreamType::Video;
 
                 out.data.assign(
                     packet->data,

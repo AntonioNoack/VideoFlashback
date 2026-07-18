@@ -7,11 +7,9 @@
 #include <mutex>
 #include <queue>
 #include <condition_variable>
-
+#include <vector>
 
 struct AVCodecContext;
-struct SwsContext;
-
 
 struct RawAudioFrame
 {
@@ -24,34 +22,29 @@ struct RawAudioFrame
     uint64_t timestamp_ns;
 };
 
-
 class AudioEncoder :
     public EncoderWorker
 {
 public:
-
     AudioEncoder(PacketBuffer& buffer);
     ~AudioEncoder();
 
     bool initialize(int sampleRate, int channels);
     void push(RawAudioFrame frame);
 
-    void set_audio_info();
+private:
+    void thread_main() override;
 
 private:
-
-    void thread_main();
-    void update_video_info();
-
-private:
-
     PacketBuffer& ring;
-
     std::queue<RawAudioFrame> frames;
 
     AVCodecContext* codec = nullptr;
-    SwsContext* scaler = nullptr;
 
     int64_t first_timestamp_ns = -1;
 
+    std::vector<float> sample_buffer;
+    int input_channels = 0;
+    int input_sample_rate = 0;
+    int64_t total_samples_sent = 0;
 };

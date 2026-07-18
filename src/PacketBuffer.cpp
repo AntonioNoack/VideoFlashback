@@ -72,3 +72,18 @@ VideoInfo PacketBuffer::get_video_info()
 
     return video_info;
 }
+
+void PacketBuffer::set_audio_info(
+    const AudioInfo& info)
+{
+    std::lock_guard lock(mutex);
+
+    audio_info = info;
+}
+
+AudioInfo PacketBuffer::get_audio_info()
+{
+    std::lock_guard lock(mutex);
+
+    return audio_info;
+}

@@ -5,10 +5,8 @@
 extern "C"
 {
 #include <libavcodec/avcodec.h>
-#include <libavutil/imgutils.h>
-#include <libswscale/swscale.h>
 #include <libavutil/opt.h>
-#include <libavutil/mathematics.h>
+#include <libavutil/channel_layout.h>
 }
 
 AudioEncoder::AudioEncoder(
@@ -20,59 +18,58 @@ AudioEncoder::AudioEncoder(
 AudioEncoder::~AudioEncoder()
 {
     stop();
-    if (codec) avcodec_free_context(&codec);
-    if (scaler) sws_freeContext(scaler);
+    if (codec) {
+        avcodec_free_context(&codec);
+    }
 }
 
 bool AudioEncoder::initialize(
-    int width,
-    int height)
+    int sampleRate,
+    int channels)
 {
     const AVCodec* encoder =
         avcodec_find_encoder(
-            AV_CODEC_ID_H264);
+            AV_CODEC_ID_AAC);
 
     if(!encoder)
     {
         std::cerr
-            << "H264 encoder unavailable\n";
+            << "AAC encoder unavailable\n";
 
         return false;
     }
 
-
     codec = avcodec_alloc_context3(encoder);
-    codec->width = width;
-    codec->height = height;
-    codec->time_base = { 1, 90000 };
-    codec->framerate = { 60, 1 };
+    if (!codec) {
+        std::cerr << "Failed to allocate AAC codec context\n";
+        return false;
+    }
 
-    codec->pix_fmt = AV_PIX_FMT_YUV420P;
-    codec->bit_rate = 12000000;
+    codec->sample_rate = sampleRate;
+    codec->sample_fmt = AV_SAMPLE_FMT_FLTP; // Planar float
+    codec->bit_rate = 128000;
+    codec->time_base = { 1, sampleRate };
 
-    av_opt_set(
-        codec->priv_data,
-        "preset",
-        "veryfast",
-        0);
+    // Set channel layout using FFmpeg 6.x API
+    av_channel_layout_default(&codec->ch_layout, channels);
 
-    av_opt_set(
-        codec->priv_data,
-        "tune",
-        "zerolatency",
-        0);
+    if (avcodec_open2(
+            codec,
+            encoder,
+            nullptr) < 0)
+    {
+        std::cerr << "Failed to open AAC codec\n";
+        avcodec_free_context(&codec);
+        codec = nullptr;
+        return false;
+    }
 
-    codec->gop_size = 60;
-    codec->max_b_frames = 0;
-
-    avcodec_open2(
-        codec,
-        encoder,
-        nullptr);
+    input_channels = channels;
+    input_sample_rate = sampleRate;
 
     AudioInfo info;
-    // info.width = codec->width;
-    // info.height = codec->height;
+    info.sampleRate = sampleRate;
+    info.channels = channels;
     info.time_base_num = codec->time_base.num;
     info.time_base_den = codec->time_base.den;
 
@@ -87,28 +84,6 @@ bool AudioEncoder::initialize(
 
     ring.set_audio_info(info);
 
-    scaler = sws_getContext(
-            width,
-            height,
-            AV_PIX_FMT_BGRA,
-
-            width,
-            height,
-            AV_PIX_FMT_YUV420P,
-
-            SWS_FAST_BILINEAR,
-
-            nullptr,
-            nullptr,
-            nullptr);
-
-    if (!scaler) {
-        std::cerr
-            << "Failed creating scaler\n";
-
-        return false;
-    }
-
     start();
     return true;
 }
@@ -118,24 +93,9 @@ void AudioEncoder::push(
 {
     {
         std::lock_guard lock(mutex);
-
         frames.push(std::move(frame));
     }
-
     condition.notify_one();
-}
-
-static AVFrame* create_yuv_frame(
-    AVCodecContext* codec)
-{
-    AVFrame* frame = av_frame_alloc();
-    frame->format = codec->pix_fmt;
-    frame->width = codec->width;
-    frame->height = codec->height;
-
-    av_frame_get_buffer(frame, 32);
-
-    return frame;
 }
 
 void AudioEncoder::thread_main()
@@ -161,86 +121,97 @@ void AudioEncoder::thread_main()
             frames.pop();
         }
 
-
-        AVFrame* avframe = create_yuv_frame(codec);
-
-        float* src[] = {
-            frame.samples.data()
-        };
-
-
-        int src_stride[] = {
-            frame.stride
-        };
-
-        sws_scale(
-            scaler,
-
-            src,
-            src_stride,
-
-            0,
-            frame.height,
-
-            avframe->data,
-            avframe->linesize);
-
         if (first_timestamp_ns < 0) {
             first_timestamp_ns = frame.timestamp_ns;
         }
 
-        int64_t relative_ns = frame.timestamp_ns - first_timestamp_ns;
+        // Buffer the samples
+        sample_buffer.insert(
+            sample_buffer.end(),
+            frame.samples.begin(),
+            frame.samples.end());
 
-        avframe->pts = av_rescale_q(
-            relative_ns,
-            AVRational{1,1000000000},
-            codec->time_base);
+        int frame_size = codec->frame_size;
+        int required_samples = frame_size * input_channels;
 
-        // std::cout << "pts: " << avframe->pts << std::endl;
-
-        if (avcodec_send_frame(
-                codec,
-                avframe) >= 0)
+        while (sample_buffer.size() >= static_cast<size_t>(required_samples))
         {
-            AVPacket* packet = av_packet_alloc();
-            if (!packet) {
+            AVFrame* avframe = av_frame_alloc();
+            if (!avframe) {
+                std::cerr << "Failed to allocate AVFrame\n";
+                break;
+            }
+
+            avframe->format = codec->sample_fmt;
+            avframe->nb_samples = frame_size;
+            avframe->sample_rate = codec->sample_rate;
+            av_channel_layout_copy(&avframe->ch_layout, &codec->ch_layout);
+
+            if (av_frame_get_buffer(avframe, 0) < 0) {
+                std::cerr << "Failed to allocate audio frame data buffer\n";
                 av_frame_free(&avframe);
-                continue;
+                break;
             }
 
-            while(avcodec_receive_packet(
+            // Convert interleaved float to planar float
+            float* src = sample_buffer.data();
+            float** dst = reinterpret_cast<float**>(avframe->data);
+
+            for (int c = 0; c < input_channels; ++c) {
+                for (int i = 0; i < frame_size; ++i) {
+                    dst[c][i] = src[i * input_channels + c];
+                }
+            }
+
+            avframe->pts = total_samples_sent;
+            total_samples_sent += frame_size;
+
+            // Remove processed samples from buffer
+            sample_buffer.erase(
+                sample_buffer.begin(),
+                sample_buffer.begin() + required_samples);
+
+            if (avcodec_send_frame(
                     codec,
-                    packet) == 0)
+                    avframe) >= 0)
             {
-                EncodedPacket out;
+                AVPacket* packet = av_packet_alloc();
+                if (!packet) {
+                    av_frame_free(&avframe);
+                    continue;
+                }
 
+                while(avcodec_receive_packet(
+                        codec,
+                        packet) == 0)
+                {
+                    EncodedPacket out;
+                    out.type = StreamType::Audio;
 
-                out.data.assign(
-                    packet->data,
-                    packet->data + packet->size);
+                    out.data.assign(
+                        packet->data,
+                        packet->data + packet->size);
 
+                    // Rescale to 90000 time base
+                    out.pts = av_rescale_q(
+                        packet->pts,
+                        codec->time_base,
+                        AVRational{1, 90000});
+                    out.dts = av_rescale_q(
+                        packet->dts,
+                        codec->time_base,
+                        AVRational{1, 90000});
+                    out.keyframe = true; // Audio frames are keyframes
 
-                out.pts = packet->pts;
-                out.dts = packet->dts;
-                out.keyframe = packet->flags & AV_PKT_FLAG_KEY;
+                    ring.push(std::move(out));
 
-                ring.push(std::move(out));
+                    av_packet_unref(packet);
+                }
 
-                av_packet_unref(packet);
+                av_packet_free(&packet);
             }
 
-            av_packet_free(&packet);
+            av_frame_free(&avframe);
         }
-
-        av_frame_free(&avframe);
-
-        std::cout
-                << "Encoding audio frame "
-                // << frame_number
-                // << ": "
-                << frame.samples
-                << "x"
-                << frame.channels
-                << "\n";
     }
 }

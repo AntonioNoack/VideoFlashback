@@ -331,16 +331,7 @@ void AudioCapture::on_stream_process(void* data)
     }
 
 
-    if (false && spa_data_ptr->data) {
-        std::cout
-            << "Frame "
-            << self->video_width
-            << "x"
-            << self->video_height
-            << " bytes="
-            << spa_data_ptr->chunk->size
-            << "\n";
-    }
+
 
 
     pw_stream_queue_buffer(
@@ -362,14 +353,16 @@ bool AudioCapture::connect_to_node(
 
     const spa_pod* params[1];
 
+    struct spa_audio_info_raw info = SPA_AUDIO_INFO_RAW_INIT(
+        .format = SPA_AUDIO_FORMAT_F32,
+        .rate = 48000,
+        .channels = 2
+    );
     params[0] =
         spa_format_audio_raw_build(
             &builder,
             SPA_PARAM_EnumFormat,
-            &SPA_AUDIO_INFO_RAW_INIT(
-                .format = SPA_AUDIO_FORMAT_F32,
-                .rate = 48000,
-                .channels = 2));
+            &info);
 
     int result =
         pw_stream_connect(
