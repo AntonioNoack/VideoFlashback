@@ -38,8 +38,6 @@ private:
 private:
 
     DBusConnection* connection = nullptr;
-
     std::string session_path;
-
     uint32_t node_id = 0;
 };

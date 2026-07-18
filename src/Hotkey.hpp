@@ -1,21 +1,21 @@
 #pragma once
 
-#include <X11/Xlib.h>
+#include <string>
+
+// sudo evtest
 
 
 class Hotkey
 {
 public:
 
-    bool initialize();
+    bool initialize(const std::string& device);
     bool pressed();
-
-    ~Hotkey();
 
 private:
 
-    Display* display = nullptr;
-    Window root;
-    KeyCode key;
+    int fd = -1;
 
+    bool super_down = false;
+    bool g_down = false;
 };

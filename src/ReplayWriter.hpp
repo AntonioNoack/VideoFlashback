@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RingBuffer.hpp"
+#include "PacketBuffer.hpp"
 
 #include <string>
 
@@ -11,7 +11,7 @@ public:
 
     bool write(
         const std::string& filename,
-        RingBuffer& ring);
+        PacketBuffer& ring);
 
 
 private:

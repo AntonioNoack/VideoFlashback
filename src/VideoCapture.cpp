@@ -1,26 +1,26 @@
 #include <chrono>
 #include <iostream>
 
-#include <spa/param/audio/format-utils.h>
+#include <spa/param/video/format-utils.h>
 #include <pipewire/pipewire.h>
 
-#include "AudioCapture.hpp"
+#include "VideoCapture.hpp"
 
 static const pw_stream_events stream_events =
 {
     PW_VERSION_STREAM_EVENTS,
 
     .state_changed =
-        AudioCapture::on_stream_state_changed,
+        VideoCapture::on_stream_state_changed,
 
     .param_changed =
-        AudioCapture::on_stream_param_changed,
+        VideoCapture::on_stream_param_changed,
 
     .process =
-        AudioCapture::on_stream_process
+        VideoCapture::on_stream_process
 };
 
-bool AudioCapture::initialize()
+bool VideoCapture::initialize()
 {
     if (initialized)
         return true;
@@ -66,24 +66,46 @@ bool AudioCapture::initialize()
         "Replay Recorder",
         pw_properties_new(
             PW_KEY_MEDIA_TYPE,
-            "Audio",
+            "Video",
             PW_KEY_MEDIA_CATEGORY,
             "Capture",
             PW_KEY_MEDIA_ROLE,
-            "Production", // or Music
+            "Screen",
             nullptr),
         &stream_events,
         this);
 
+
+    // not needed anymore:
+    /*registry = pw_core_get_registry(
+        core,
+        PW_VERSION_REGISTRY,
+        0);
+
+
+    static const pw_registry_events registry_events =
+    {
+        PW_VERSION_REGISTRY_EVENTS,
+        .global = on_registry_global
+    };
+
+
+    pw_registry_add_listener(
+        registry,
+        &registry_listener,
+        &registry_events,
+        this);*/
+
+
     initialized = true;
 
-    std::cout << "Audio connected to PipeWire\n";
+    std::cout << "Video connected to PipeWire\n";
 
     return true;
 }
 
 
-void AudioCapture::update()
+void VideoCapture::update()
 {
     if (!initialized)
         return;
@@ -94,7 +116,7 @@ void AudioCapture::update()
 }
 
 
-void AudioCapture::shutdown()
+void VideoCapture::shutdown()
 {
     if (!initialized)
         return;
@@ -134,14 +156,14 @@ void AudioCapture::shutdown()
 }
 
 
-AudioCapture::~AudioCapture()
+VideoCapture::~VideoCapture()
 {
     shutdown();
 }
 
 
 
-void AudioCapture::on_registry_global(
+void VideoCapture::on_registry_global(
     void* data,
     uint32_t id,
     uint32_t permissions,
@@ -149,7 +171,8 @@ void AudioCapture::on_registry_global(
     uint32_t version,
     const struct spa_dict* props)
 {
-    auto* self = static_cast<AudioCapture*>(data);
+    auto* self =
+        static_cast<VideoCapture*>(data);
 
 
     if (!props)
@@ -185,14 +208,14 @@ void AudioCapture::on_registry_global(
     }
 }
 
-void AudioCapture::on_stream_state_changed(
+void VideoCapture::on_stream_state_changed(
     void* data,
     enum pw_stream_state old_state,
     enum pw_stream_state state,
     const char* error)
 {
     std::cout
-        << "Stream state: "
+        << "Video stream state: "
         << pw_stream_state_as_string(state)
         << "\n";
 
@@ -200,33 +223,43 @@ void AudioCapture::on_stream_state_changed(
         std::cout << error << "\n";
 }
 
-void AudioCapture::on_stream_param_changed(
+void VideoCapture::on_stream_param_changed(
     void* data,
     uint32_t id,
     const struct spa_pod* param)
 {
-    auto* self = static_cast<AudioCapture*>(data);
+    auto* self =
+        static_cast<VideoCapture*>(data);
 
     if (!param) return;
-    if (spa_format_audio_raw_parse(
-        param,
-        &self->audio_format) < 0)
+
+
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    if (spa_format_video_raw_parse(
+            param,
+            &self->video_format) < 0)
     {
         std::cout
-            << "Could not parse audio format\n";
+            << "Could not parse video format\n";
 
         return;
     }
 
-    self->sample_rate = self->audio_format.rate;
-    self->channels = self->audio_format.channels;
+
+    width = self->video_format.size.width;
+    height = self->video_format.size.height;
+
+    self->video_width = width;
+    self->video_height = height;
 
     std::cout
-        << "Audio format "
-        << self->sample_rate
-        << "Hz "
-        << self->channels
-        << " channels\n";
+        << "Video format "
+        << width
+        << "x"
+        << height
+        << "\n";
 }
 
 
@@ -239,10 +272,10 @@ static int64_t now_nanoseconds()
         .count();
 }
 
-void AudioCapture::on_stream_process(void* data)
+void VideoCapture::on_stream_process(void* data)
 {
     auto* self =
-        static_cast<AudioCapture*>(data);
+        static_cast<VideoCapture*>(data);
 
     pw_buffer* buffer =
         pw_stream_dequeue_buffer(self->stream);
@@ -301,7 +334,7 @@ void AudioCapture::on_stream_process(void* data)
                 << "PipeWire header timestamp "
                 << timestamp
                 << "\n";*/
-                
+
         } else if (false && pw_stream_get_time_n(
             self->stream,
             &time, sizeof(time)) == 0) // todo bug: this produces 0
@@ -321,19 +354,21 @@ void AudioCapture::on_stream_process(void* data)
                 << "\n";*/
         }
 
-        uint32_t frames = spa_data_ptr->chunk->size / (sizeof(float) * self->channels);
         self->frame_callback(
-            static_cast<float*>(spa_data_ptr->data),
+            static_cast<uint8_t*>(spa_data_ptr->data),
 
-            frames,
-            self->channels,
+            self->video_width,
+            self->video_height,
+
+            spa_data_ptr->chunk->stride,
+
             timestamp);
     }
 
 
     if (false && spa_data_ptr->data) {
         std::cout
-            << "Frame "
+            << "VideoFrame "
             << self->video_width
             << "x"
             << self->video_height
@@ -348,28 +383,12 @@ void AudioCapture::on_stream_process(void* data)
         buffer);
 }
 
-bool AudioCapture::connect_to_node(
+bool VideoCapture::connect_to_node(
     uint32_t node_id)
 {
     if (!stream)
         return false;
 
-    uint8_t buffer[1024];
-    spa_pod_builder builder =
-        SPA_POD_BUILDER_INIT(
-            buffer,
-            sizeof(buffer));
-
-    const spa_pod* params[1];
-
-    params[0] =
-        spa_format_audio_raw_build(
-            &builder,
-            SPA_PARAM_EnumFormat,
-            &SPA_AUDIO_INFO_RAW_INIT(
-                .format = SPA_AUDIO_FORMAT_F32,
-                .rate = 48000,
-                .channels = 2));
 
     int result =
         pw_stream_connect(
@@ -379,14 +398,14 @@ bool AudioCapture::connect_to_node(
             static_cast<pw_stream_flags>(
                 PW_STREAM_FLAG_AUTOCONNECT |
                 PW_STREAM_FLAG_MAP_BUFFERS),
-            params,
-            1);
+            nullptr,
+            0);
 
 
     if (result < 0)
     {
         std::cerr
-            << "Failed connecting audio stream: "
+            << "Failed connecting stream: "
             << result
             << "\n";
 
@@ -401,6 +420,8 @@ bool AudioCapture::connect_to_node(
     return true;
 }
 
-void AudioCapture::set_callback(AudioFrameCallback callback) {
+void VideoCapture::set_callback(
+    VideoFrameCallback callback)
+{
     frame_callback = std::move(callback);
 }

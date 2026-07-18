@@ -1,41 +1,27 @@
 #include "Hotkey.hpp"
 
-#include <X11/keysym.h>
+#include <linux/input.h>
+
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <iostream>
 
 
-bool Hotkey::initialize()
+bool Hotkey::initialize(
+    const std::string& device)
 {
-    display =
-        XOpenDisplay(nullptr);
+    fd =
+        open(
+            device.c_str(),
+            O_RDONLY | O_NONBLOCK);
 
 
-    if (!display)
+    if(fd < 0)
+    {
+        perror("open input device");
         return false;
-
-
-    root = DefaultRootWindow(display);
-
-    key = XKeysymToKeycode(
-            display,
-            XK_g);
-
-    XGrabKey(
-        display,
-        key,
-        Mod4Mask,
-        root,
-        True,
-        GrabModeAsync,
-        GrabModeAsync);
-
-
-    XSelectInput(
-        display,
-        root,
-        KeyPressMask);
-
-
-    XFlush(display);
+    }
 
 
     return true;
@@ -45,40 +31,45 @@ bool Hotkey::initialize()
 
 bool Hotkey::pressed()
 {
-    while (XPending(display))
+    input_event event;
+
+
+    while(read(
+        fd,
+        &event,
+        sizeof(event)) == sizeof(event))
     {
-        XEvent event;
-
-        XNextEvent(
-            display,
-            &event);
+        if(event.type != EV_KEY)
+            continue;
 
 
-        if(event.type == KeyPress)
+        switch(event.code)
         {
-            if(event.xkey.keycode == key)
-                return true;
+            case KEY_LEFTMETA:
+            case KEY_RIGHTMETA:
+
+                super_down =
+                    event.value != 0;
+
+                break;
+
+
+            case KEY_G:
+
+                g_down =
+                    event.value != 0;
+
+                break;
+        }
+
+
+        if(super_down && g_down)
+        {
+            g_down = false;
+            return true;
         }
     }
 
 
     return false;
-}
-
-
-
-Hotkey::~Hotkey()
-{
-    if(display)
-    {
-        XUngrabKey(
-            display,
-            key,
-            Mod4Mask,
-            root);
-
-
-        XCloseDisplay(
-            display);
-    }
 }

@@ -13,11 +13,13 @@ extern "C"
 
 bool ReplayWriter::write(
     const std::string& filename,
-    RingBuffer& ring)
+    PacketBuffer& ring)
 {
 
     auto packets = ring.snapshot();
-    VideoInfo info = ring.get_video_info();
+
+    AudioInfo AudioInfo = ring.get_audio_info();
+    VideoInfo videoInfo = ring.get_video_info();
 
     if (packets.empty())
     {
@@ -63,33 +65,33 @@ bool ReplayWriter::write(
 
     stream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     stream->codecpar->codec_id = AV_CODEC_ID_H264;
-    stream->codecpar->width = info.width;
-    stream->codecpar->height = info.height;
+    stream->codecpar->width = videoInfo.width;
+    stream->codecpar->height = videoInfo.height;
     stream->codecpar->format = AV_PIX_FMT_YUV420P;
 
     stream->time_base =
     {
-        info.time_base_num,
-        info.time_base_den
+        videoInfo.time_base_num,
+        videoInfo.time_base_den
     };
 
     stream->avg_frame_rate = { 60, 1 };
     stream->r_frame_rate = { 60, 1 };
 
-    if (!info.extradata.empty())
+    if (!videoInfo.extradata.empty())
     {
         stream->codecpar->extradata =
             static_cast<uint8_t*>(
                 av_malloc(
-                    info.extradata.size()));
+                    videoInfo.extradata.size()));
 
         memcpy(
             stream->codecpar->extradata,
-            info.extradata.data(),
-            info.extradata.size());
+            videoInfo.extradata.data(),
+            videoInfo.extradata.size());
 
         stream->codecpar->extradata_size =
-            info.extradata.size();
+            videoInfo.extradata.size();
     }
 
     if (!(format->oformat->flags &
@@ -137,21 +139,11 @@ bool ReplayWriter::write(
 
     for (const auto& input : packets)
     {
-        AVPacket* packet =
-            av_packet_alloc();
+        AVPacket* packet = av_packet_alloc();
 
-
-        packet->data =
-            const_cast<uint8_t*>(
-                input.data.data());
-
-        packet->size =
-            input.data.size();
-
-
-        packet->stream_index =
-            stream->index;
-
+        packet->data = const_cast<uint8_t*>(input.data.data());
+        packet->size = input.data.size();
+        packet->stream_index = stream->index;
 
         if (first_pts == AV_NOPTS_VALUE)
         {
@@ -159,20 +151,13 @@ bool ReplayWriter::write(
             first_dts = input.dts;
         }
 
-
-        packet->pts =
-            input.pts - first_pts;
-
-
-        packet->dts =
-            input.dts - first_dts;
-
+        packet->pts = input.pts - first_pts;
+        packet->dts = input.dts - first_dts;
 
         packet->duration = av_rescale_q(
             1,
             AVRational{1,60},
             stream->time_base);
-
 
         if (input.keyframe)
         {
@@ -190,14 +175,11 @@ bool ReplayWriter::write(
         }
 
 
-        av_packet_free(
-            &packet);
+        av_packet_free(&packet);
     }
 
 
-    av_write_trailer(
-        format);
-
+    av_write_trailer(format);
 
     if (!(format->oformat->flags &
           AVFMT_NOFILE))
