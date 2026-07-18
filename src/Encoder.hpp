@@ -20,6 +20,7 @@ struct RawFrame
     int height;
 
     int stride;
+    uint64_t timestamp_ns;
 };
 
 
@@ -57,5 +58,6 @@ private:
     AVCodecContext* codec = nullptr;
     SwsContext* scaler = nullptr;
 
-    int64_t frame_number = 0;
+    int64_t first_timestamp_ns = -1;
+
 };

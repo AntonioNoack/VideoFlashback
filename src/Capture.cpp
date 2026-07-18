@@ -1,7 +1,9 @@
-#include "Capture.hpp"
-
+#include <chrono>
 #include <iostream>
+
 #include <spa/param/video/format-utils.h>
+
+#include "Capture.hpp"
 
 static const pw_stream_events stream_events =
 {
@@ -260,6 +262,15 @@ void Capture::on_stream_param_changed(
 }
 
 
+static int64_t now_nanoseconds()
+{
+    return std::chrono::duration_cast<
+        std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now()
+                .time_since_epoch())
+        .count();
+}
+
 void Capture::on_stream_process(void* data)
 {
     auto* self =
@@ -303,6 +314,33 @@ void Capture::on_stream_process(void* data)
         spa_data_ptr->data &&
         spa_data_ptr->chunk)
     {
+
+        int64_t timestamp = 0;
+
+        spa_meta_header* header =
+            static_cast<spa_meta_header*>(
+                spa_buffer_find_meta_data(
+                    buffer->buffer,
+                    SPA_META_Header,
+                    sizeof(spa_meta_header)));
+
+
+        if (header) {
+            timestamp = header->pts;
+
+            std::cout
+                << "PipeWire timestamp "
+                << timestamp
+                << "\n";
+        } else {
+            timestamp = now_nanoseconds();
+
+            std::cout
+                << "Chrono timestamp "
+                << timestamp
+                << "\n";
+        }
+
         self->frame_callback(
             static_cast<uint8_t*>(spa_data_ptr->data),
 
@@ -311,7 +349,7 @@ void Capture::on_stream_process(void* data)
 
             spa_data_ptr->chunk->stride,
 
-            /*spa_buffer->pts*/ 0);
+            timestamp);
     }
 
 

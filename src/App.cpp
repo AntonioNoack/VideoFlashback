@@ -47,6 +47,7 @@ int App::run()
             frame.width = width;
             frame.height = height;
             frame.stride = stride;
+            frame.timestamp_ns = timestamp;
 
             frame.data.assign(
                 data,

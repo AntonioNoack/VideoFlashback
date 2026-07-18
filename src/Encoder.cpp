@@ -8,6 +8,7 @@ extern "C"
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 #include <libavutil/opt.h>
+#include <libavutil/mathematics.h>
 }
 
 Encoder::Encoder(
@@ -194,8 +195,17 @@ void Encoder::thread_main()
             avframe->data,
             avframe->linesize);
 
+        if (first_timestamp_ns < 0) {
+            first_timestamp_ns = frame.timestamp_ns;
+        }
+
+        int64_t relative_ns = frame.timestamp_ns - first_timestamp_ns;
+
         // 60 fps-hack, timebase is 90kHz
-        avframe->pts = 1500 * frame_number++;
+        avframe->pts = av_rescale_q(
+            relative_ns,
+            AVRational{1,1000000000},
+            codec->time_base);
 
         if (avcodec_send_frame(
                 codec,
@@ -233,7 +243,7 @@ void Encoder::thread_main()
 
         av_frame_free(&avframe);
 
-        if (frame_number % 10 == 0) {
+        /*if (frame_number % 10 == 0) {
             std::cout
                 << "Encoding frame "
                 << frame_number
@@ -242,6 +252,6 @@ void Encoder::thread_main()
                 << "x"
                 << frame.height
                 << "\n";
-        }
+        }*/
     }
 }
