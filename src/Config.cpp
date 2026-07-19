@@ -3,6 +3,7 @@
 #include <toml++/toml.hpp>
 
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
@@ -48,6 +49,39 @@ std::string expand_user_path(const std::string& path)
     return path;
 }
 
+bool parse_scale(const std::string& scale, int& width, int& height)
+{
+    width = 0;
+    height = 0;
+
+    if (scale.empty())
+        return false;
+
+    std::string lower;
+    lower.reserve(scale.size());
+    for (char c : scale)
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+
+    if (lower == "native" || lower == "source" || lower == "auto")
+        return false;
+
+    const auto x_pos = scale.find('x');
+    if (x_pos == std::string::npos || x_pos == 0 || x_pos + 1 >= scale.size())
+        return false;
+
+    try
+    {
+        width = std::stoi(scale.substr(0, x_pos));
+        height = std::stoi(scale.substr(x_pos + 1));
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    return width > 0 && height > 0;
+}
+
 Config load_config()
 {
     Config config;
@@ -76,6 +110,48 @@ Config load_config()
 
             if (const auto* fmt = (*output)["filename_format"].as_string())
                 config.filename_format = fmt->get();
+        }
+
+        if (const auto* video = table["video"].as_table())
+        {
+            if (const auto* fps = (*video)["capture_fps"].as_integer())
+                config.capture_fps = static_cast<int>(fps->get());
+
+            if (const auto* scale = (*video)["scale"].as_string())
+                config.scale = scale->get();
+
+            if (const auto* encoding = (*video)["encoding"].as_string())
+                config.encoding = encoding->get();
+
+            if (const auto* bitrate = (*video)["bitrate"].as_integer())
+                config.bitrate = bitrate->get();
+
+            if (const auto* preset = (*video)["preset"].as_string())
+                config.preset = preset->get();
+        }
+
+        if (const auto* audio = table["audio"].as_table())
+        {
+            if (const auto* rate = (*audio)["sample_rate"].as_integer())
+                config.sample_rate = static_cast<int>(rate->get());
+        }
+
+        if (config.capture_fps <= 0)
+        {
+            std::cerr << "Invalid capture_fps; falling back to 60\n";
+            config.capture_fps = 60;
+        }
+
+        if (config.bitrate <= 0)
+        {
+            std::cerr << "Invalid bitrate; falling back to 12000000\n";
+            config.bitrate = 12'000'000;
+        }
+
+        if (config.sample_rate <= 0)
+        {
+            std::cerr << "Invalid sample_rate; falling back to 48000\n";
+            config.sample_rate = 48000;
         }
 
         std::cout << "Loaded config from " << path << "\n";

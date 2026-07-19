@@ -84,9 +84,21 @@ Example (see also `config.example.toml` in the repo):
 [output]
 directory = "~/Videos/Captures"
 filename_format = "%Y-%m-%d %H-%M-%S.mp4"
+
+[video]
+capture_fps = 60
+scale = "native"          # or "1920x1080"
+encoding = "h264"         # or "hevc"
+bitrate = 12000000        # bits per second
+preset = "veryfast"
+
+[audio]
+sample_rate = 48000
 ```
 
 `filename_format` is a [`strftime`](https://man7.org/linux/man-pages/man3/strftime.3.html) pattern. The destination directory is created automatically if it does not exist.
+
+Encode resolution is taken from the PipeWire capture size when `scale = "native"`. Set `scale` to a `WIDTHxHEIGHT` string to rescale before encoding.
 
 ## Notes
 

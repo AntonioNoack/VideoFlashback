@@ -7,3 +7,24 @@ directory = "~/Videos/Captures"
 # Filename pattern using strftime (see `man 3 strftime`).
 # Default example: 2024-10-29 17-08-18.mp4
 filename_format = "%Y-%m-%d %H-%M-%S.mp4"
+
+[video]
+# Encode at most this many frames per second (extras from PipeWire are dropped).
+capture_fps = 60
+
+# Encode resolution. "native" uses the captured size.
+# Otherwise WIDTHxHEIGHT, e.g. "1920x1080".
+scale = "native"
+
+# Codec: "h264" or "hevc" (alias "h265").
+encoding = "h264"
+
+# Target bitrate in bits per second (e.g. 12000000 = 12 Mbps).
+bitrate = 12000000
+
+# Encoder preset (veryfast, fast, medium, slow, ...).
+preset = "veryfast"
+
+[audio]
+# Capture/encode sample rate in Hz.
+sample_rate = 48000

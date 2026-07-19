@@ -9,6 +9,10 @@ struct VideoInfo
 {
     int width = 0;
     int height = 0;
+    int fps = 60;
+
+    // AVCodecID value from libavcodec (stored as int to avoid leaking FFmpeg headers).
+    int codec_id = 27; // AV_CODEC_ID_H264
 
     int time_base_num = 1;
     int time_base_den = 90000;

@@ -355,8 +355,8 @@ bool AudioCapture::connect_to_node(
 
     struct spa_audio_info_raw info = SPA_AUDIO_INFO_RAW_INIT(
         .format = SPA_AUDIO_FORMAT_F32,
-        .rate = 48000,
-        .channels = 2
+        .rate = preferred_sample_rate,
+        .channels = preferred_channels
     );
     params[0] =
         spa_format_audio_raw_build(
@@ -392,6 +392,14 @@ bool AudioCapture::connect_to_node(
 
 
     return true;
+}
+
+void AudioCapture::set_preferred_format(
+    uint32_t rate,
+    uint32_t channel_count)
+{
+    preferred_sample_rate = rate;
+    preferred_channels = channel_count;
 }
 
 void AudioCapture::set_callback(AudioFrameCallback callback) {

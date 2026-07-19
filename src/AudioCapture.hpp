@@ -42,6 +42,7 @@ public:
     void update();
     void shutdown();
 
+    void set_preferred_format(uint32_t sample_rate, uint32_t channels);
     void set_callback(AudioFrameCallback callback);
 
     static void on_stream_state_changed(
@@ -79,6 +80,9 @@ private:
 
     uint32_t sample_rate = 0;
     uint32_t channels = 0;
+
+    uint32_t preferred_sample_rate = 48000;
+    uint32_t preferred_channels = 2;
 
     AudioFrameCallback frame_callback;
     struct spa_audio_info_raw audio_format{};

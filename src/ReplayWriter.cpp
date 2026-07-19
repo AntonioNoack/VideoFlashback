@@ -60,7 +60,8 @@ bool ReplayWriter::write(
     }
 
     video_stream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-    video_stream->codecpar->codec_id = AV_CODEC_ID_H264;
+    video_stream->codecpar->codec_id =
+        static_cast<AVCodecID>(videoInfo.codec_id);
     video_stream->codecpar->width = videoInfo.width;
     video_stream->codecpar->height = videoInfo.height;
     video_stream->codecpar->format = AV_PIX_FMT_YUV420P;
@@ -71,8 +72,9 @@ bool ReplayWriter::write(
         videoInfo.time_base_den
     };
 
-    video_stream->avg_frame_rate = { 60, 1 };
-    video_stream->r_frame_rate = { 60, 1 };
+    const int fps = videoInfo.fps > 0 ? videoInfo.fps : 60;
+    video_stream->avg_frame_rate = { fps, 1 };
+    video_stream->r_frame_rate = { fps, 1 };
 
     if (!videoInfo.extradata.empty())
     {
@@ -240,9 +242,10 @@ bool ReplayWriter::write(
 
         if (input.type == StreamType::Video)
         {
+            const int fps = videoInfo.fps > 0 ? videoInfo.fps : 60;
             packet->duration = av_rescale_q(
                 1,
-                AVRational{1,60},
+                AVRational{1, fps},
                 target_stream->time_base);
         }
         else

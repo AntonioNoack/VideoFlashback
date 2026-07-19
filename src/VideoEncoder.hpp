@@ -2,6 +2,7 @@
 
 #include "PacketBuffer.hpp"
 #include "EncoderWorker.hpp"
+#include "Config.hpp"
 
 #include <thread>
 #include <mutex>
@@ -33,15 +34,15 @@ public:
     VideoEncoder(PacketBuffer& buffer);
     ~VideoEncoder();
 
-    bool initialize(int width, int height);
+    // Apply encode settings. Opens the worker thread; the codec/scaler are
+    // created lazily from the first captured frame's resolution.
+    bool configure(const Config& config);
     void push(RawVideoFrame frame);
-
-    void set_video_info();
 
 private:
 
-    void thread_main();
-    void update_video_info();
+    void thread_main() override;
+    bool ensure_encoder(int source_width, int source_height);
 
 private:
 
@@ -52,6 +53,15 @@ private:
     AVCodecContext* codec = nullptr;
     SwsContext* scaler = nullptr;
 
-    int64_t first_timestamp_ns = -1;
+    Config settings;
+    bool configured = false;
+    bool encoder_ready = false;
 
+    int source_width = 0;
+    int source_height = 0;
+    int encode_width = 0;
+    int encode_height = 0;
+
+    int64_t first_timestamp_ns = -1;
+    int64_t last_encoded_timestamp_ns = -1;
 };

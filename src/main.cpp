@@ -64,6 +64,12 @@ int main()
     std::cout << "Saving clips to "
               << expand_user_path(config.output_directory)
               << " (" << config.filename_format << ")\n";
+    std::cout << "Video settings: "
+              << config.capture_fps << " fps, scale=" << config.scale
+              << ", encoding=" << config.encoding
+              << ", bitrate=" << (config.bitrate / 1000) << " kbps"
+              << ", preset=" << config.preset << "\n";
+    std::cout << "Audio settings: " << config.sample_rate << " Hz\n";
 
     int64_t numSeconds = 30;
     PacketBuffer buffer(numSeconds);
@@ -111,7 +117,10 @@ int main()
         return 1;
     }
 
-    videoEncoder.initialize(3840, 2160);
+    if (!videoEncoder.configure(config)) {
+        if (server_fd >= 0) { close(server_fd); unlink(socket_path.c_str()); }
+        return 1;
+    }
 
     VideoCapture videoCapture;
     if (!videoCapture.initialize()) {
@@ -141,7 +150,7 @@ int main()
         });
     videoCapture.connect_to_node(node);
 
-    audioEncoder.initialize(48000, 2);
+    audioEncoder.initialize(config.sample_rate, 2);
 
     AudioCapture audioCapture;
     if (!audioCapture.initialize()) {
@@ -149,8 +158,12 @@ int main()
         return 1;
     }
 
+    audioCapture.set_preferred_format(
+        static_cast<uint32_t>(config.sample_rate),
+        2);
+
     audioCapture.set_callback(
-        [&audioEncoder](const float* data,
+        [&audioEncoder, &config](const float* data,
             uint32_t frames,
             uint32_t channels,
             uint64_t timestamp) {
@@ -158,7 +171,7 @@ int main()
             RawAudioFrame frame;
 
             frame.channels = channels;
-            frame.sampleRate = 48000;
+            frame.sampleRate = config.sample_rate;
             frame.timestamp_ns = timestamp;
 
             frame.samples.assign(
