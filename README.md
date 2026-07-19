@@ -1,16 +1,19 @@
 # VideoFlashback
 
-VideoFlashback is a compact, high-performance gameplay replay recorder for Linux. It captures video and audio via PipeWire/SPA, buffers the last 30 seconds of activity in memory, and writes it to an MP4 file when you press `Super + G` (Windows Key + G).
+VideoFlashback is a compact gameplay replay recorder for Linux. It continuously captures screen and audio via PipeWire, keeps the last 30 seconds in memory, and writes an MP4 when you fire the trigger.
 
-## Features
+It works like Windows Game Bar (`Win + G`): a background server records into a ring buffer, and a separate trigger program saves a clip on demand.
 
-- **PipeWire Integration**: Captured screens and audio streams are piped through PipeWire & SPA.
-- **In-Memory Buffering**: Constantly maintains a sliding 30-second buffer in memory, preventing continuous disk writes.
-- **Low-Level Hotkey Input**: Monitors hotkey events using `/dev/input/event*`.
+## How it works
+
+| Component | Role |
+| --- | --- |
+| `flashback-server` | Runs in the background. Captures video/audio, encodes H.264/AAC, and holds a 30-second in-memory buffer. Listens on `/tmp/videoflashback.sock`. |
+| `flashback-trigger` | Connects to that socket and tells the server to save `replay.mp4`. Bind this binary to a global shortcut in your desktop environment. |
 
 ## Dependencies
 
-Install the required development libraries on Ubuntu/Debian:
+Ubuntu/Debian:
 
 ```bash
 sudo apt install \
@@ -31,8 +34,6 @@ sudo apt install \
 
 ## Build
 
-Build the project using CMake:
-
 ```bash
 mkdir build
 cd build
@@ -40,14 +41,27 @@ cmake ..
 make
 ```
 
-This generates the `replay` executable.
+This produces `flashback-server` and `flashback-trigger` in the build directory.
 
 ## Usage
 
-1. **Configure keyboard device**: Identify the input event path corresponding to your keyboard under `/dev/input/event*`. If it differs from the default `/dev/input/event3` configured in `src/App.cpp`, update the device path there.
-2. **Run the utility**:
+1. **Start the server** (leave it running in the background):
+
    ```bash
-   sudo ./replay
+   ./flashback-server
    ```
-   *(Note: Reading `/dev/input/event*` typically requires root privileges or membership in the `input` group).*
-3. **Capture replay**: Press `Super + G` (Windows Key + G) during gameplay to save the last 30 seconds to `replay.mp4` in your working directory.
+
+   On first start, approve the PipeWire/xdg-desktop-portal screen share prompt. The server prints when capture is active and when the control socket is ready.
+
+2. **Register the trigger as a global shortcut** in your desktop settings (GNOME, KDE, Cosmic, etc.):
+
+   - **Command:** absolute path to `flashback-trigger`, e.g. `/home/you/VideoFlashback/build/flashback-trigger`
+   - **Shortcut:** whatever you prefer (e.g. `Super + G`)
+
+3. **Capture a replay:** press your shortcut. The server writes `replay.mp4` in its current working directory (the directory from which you started `flashback-server`).
+
+You can also run the trigger manually:
+
+```bash
+./flashback-trigger
+```
