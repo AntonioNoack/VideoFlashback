@@ -1,5 +1,6 @@
 #include "AudioCapture.hpp"
 #include "AudioEncoder.hpp"
+#include "Config.hpp"
 #include "VideoCapture.hpp"
 #include "VideoEncoder.hpp"
 #include "ReplayWriter.hpp"
@@ -7,6 +8,7 @@
 #include "ScreenCast.hpp"
 
 #include <iostream>
+#include <string>
 #include <thread>
 #include <chrono>
 #include <fcntl.h>
@@ -57,6 +59,11 @@ static uint32_t get_default_sink_id() {
 int main()
 {
     std::cout << "Replay recorder service started\n";
+
+    const Config config = load_config();
+    std::cout << "Saving clips to "
+              << expand_user_path(config.output_directory)
+              << " (" << config.filename_format << ")\n";
 
     int64_t numSeconds = 30;
     PacketBuffer buffer(numSeconds);
@@ -172,7 +179,7 @@ int main()
     audioCapture.connect_to_node(audio_node);
 
     bool running = true;
-    std::cout << "Service capture started. Use replay-trigger to save the last 30s.\n";
+    std::cout << "Service capture started. Use flashback-trigger to save the last 30s.\n";
     while (running) {
         audioCapture.update();
         videoCapture.update();
@@ -191,8 +198,13 @@ int main()
         }
 
         if (triggered) {
-            std::cout << "Trigger command received! Writing replay.mp4..." << std::endl;
-            writer.write("replay.mp4", buffer);
+            const std::string path = make_capture_path(config);
+            if (path.empty()) {
+                std::cerr << "Could not build capture path; skipping save\n";
+            } else {
+                std::cout << "Trigger command received! Writing " << path << "...\n";
+                writer.write(path, buffer);
+            }
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));

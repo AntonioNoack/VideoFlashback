@@ -5,6 +5,14 @@ project(VideoFlashback)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(FetchContent)
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
+
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
@@ -21,6 +29,7 @@ pkg_check_modules(SWSCALE REQUIRED libswscale)
 
 add_executable(flashback-server
     src/main.cpp
+    src/Config.cpp
     src/AudioCapture.cpp
     src/AudioEncoder.cpp
     src/VideoCapture.cpp
@@ -50,6 +59,7 @@ target_link_libraries(flashback-server PRIVATE
     ${SWSCALE_LIBRARIES}
     ${X11_LIBRARIES}
     Threads::Threads
+    tomlplusplus::tomlplusplus
 )
 
 add_executable(flashback-trigger src/trigger.cpp)

@@ -1,0 +1,9 @@
+# Copy to ~/.config/videoflashback/config.toml (or $XDG_CONFIG_HOME/videoflashback/config.toml)
+
+[output]
+# Destination folder for saved clips. "~" is expanded to $HOME.
+directory = "~/Videos/Captures"
+
+# Filename pattern using strftime (see `man 3 strftime`).
+# Default example: 2024-10-29 17-08-18.mp4
+filename_format = "%Y-%m-%d %H-%M-%S.mp4"

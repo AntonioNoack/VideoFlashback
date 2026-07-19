@@ -9,7 +9,9 @@ It works like Windows Game Bar (`Win + G`): a background server records into a r
 | Component | Role |
 | --- | --- |
 | `flashback-server` | Runs in the background. Captures video/audio, encodes H.264/AAC, and holds a 30-second in-memory buffer. Listens on `/tmp/videoflashback.sock`. |
-| `flashback-trigger` | Connects to that socket and tells the server to save `replay.mp4`. Bind this binary to a global shortcut in your desktop environment. |
+| `flashback-trigger` | Connects to that socket and tells the server to save a clip. Bind this binary to a global shortcut in your desktop environment. |
+
+By default, clips are written to `~/Videos/Captures/` with names like `2024-10-29 17-08-18.mp4`.
 
 ## Dependencies
 
@@ -31,6 +33,8 @@ sudo apt install \
     libdbus-1-dev \
     libx11-dev
 ```
+
+CMake also fetches [toml++](https://github.com/marzer/tomlplusplus) automatically (needs network on the first configure).
 
 ## Build
 
@@ -58,10 +62,33 @@ This produces `flashback-server` and `flashback-trigger` in the build directory.
    - **Command:** absolute path to `flashback-trigger`, e.g. `/home/you/VideoFlashback/build/flashback-trigger`
    - **Shortcut:** whatever you prefer (e.g. `Super + G`)
 
-3. **Capture a replay:** press your shortcut. The server writes `replay.mp4` in its current working directory (the directory from which you started `flashback-server`).
+3. **Capture a replay:** press your shortcut. The server saves a timestamped MP4 under `~/Videos/Captures/` (or your configured directory).
 
 You can also run the trigger manually:
 
 ```bash
 ./flashback-trigger
 ```
+
+## Configuration
+
+Optional TOML config (created on demand; missing file uses defaults):
+
+`~/.config/videoflashback/config.toml`
+
+or `$XDG_CONFIG_HOME/videoflashback/config.toml`
+
+Example (see also `config.example.toml` in the repo):
+
+```toml
+[output]
+directory = "~/Videos/Captures"
+filename_format = "%Y-%m-%d %H-%M-%S.mp4"
+```
+
+`filename_format` is a [`strftime`](https://man7.org/linux/man-pages/man3/strftime.3.html) pattern. The destination directory is created automatically if it does not exist.
+
+## Notes
+
+- The server must already be running; the trigger only signals a save.
+- No `/dev/input` access and no root are required for hotkeys — your desktop’s shortcut system runs the trigger.
