@@ -29,7 +29,7 @@ public:
     AudioEncoder(PacketBuffer& buffer);
     ~AudioEncoder();
 
-    bool initialize(int sampleRate, int channels);
+    bool initialize(int sampleRate, int channels, int64_t bitrate = 128000);
     void push(RawAudioFrame frame);
 
 private:

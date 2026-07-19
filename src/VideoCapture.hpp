@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 
 #include <spa/param/video/raw.h>
@@ -43,6 +44,9 @@ public:
     void shutdown();
 
     bool connect_to_node(uint32_t node_id);
+
+    // Preferred capture format name: bgra, rgba, bgr0, rgb0, argb, abgr.
+    void set_preferred_pixel_format(const std::string& name);
 
     void set_callback(VideoFrameCallback callback);
 
@@ -86,6 +90,8 @@ private:
     uint32_t video_width = 0;
     uint32_t video_height = 0;
     uint32_t video_stride = 0;
+
+    spa_video_format preferred_format = SPA_VIDEO_FORMAT_BGRA;
 
     VideoFrameCallback frame_callback;
 

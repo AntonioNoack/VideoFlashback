@@ -15,6 +15,8 @@ public:
 
     bool initialize();
 
+    void set_include_cursor(bool enabled);
+
     uint32_t start();
 
 
@@ -40,4 +42,5 @@ private:
     DBusConnection* connection = nullptr;
     std::string session_path;
     uint32_t node_id = 0;
+    bool include_cursor = true;
 };

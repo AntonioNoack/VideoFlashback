@@ -56,6 +56,40 @@ static uint32_t get_default_sink_id() {
     return sink_id;
 }
 
+static uint32_t resolve_audio_node(const Config& config)
+{
+    std::string device = config.audio_device;
+    for (char& c : device)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    if (device.empty() || device == "default" || device == "auto")
+    {
+        const uint32_t sink = get_default_sink_id();
+        if (sink != 0)
+        {
+            std::cout << "Targeting default audio sink monitor (node ID: "
+                      << sink << ")\n";
+            return sink;
+        }
+        std::cout << "Could not detect default sink ID; using PW_ID_ANY\n";
+        return PW_ID_ANY;
+    }
+
+    try
+    {
+        const uint32_t node = static_cast<uint32_t>(std::stoul(device));
+        std::cout << "Targeting configured audio node ID: " << node << "\n";
+        return node;
+    }
+    catch (...)
+    {
+        std::cerr << "Invalid audio.device '" << config.audio_device
+                  << "'; falling back to default sink detection\n";
+        const uint32_t sink = get_default_sink_id();
+        return sink != 0 ? sink : PW_ID_ANY;
+    }
+}
+
 int main()
 {
     std::cout << "Replay recorder service started\n";
@@ -64,22 +98,34 @@ int main()
     std::cout << "Saving clips to "
               << expand_user_path(config.output_directory)
               << " (" << config.filename_format << ")\n";
+    std::cout << "Replay buffer: " << config.buffer_seconds << "s\n";
     std::cout << "Video settings: "
               << config.capture_fps << " fps, scale=" << config.scale
               << ", encoding=" << config.encoding
-              << ", bitrate=" << (config.bitrate / 1000) << " kbps"
-              << ", preset=" << config.preset << "\n";
-    std::cout << "Audio settings: " << config.sample_rate << " Hz\n";
+              << ", rate_control=" << config.rate_control;
+    if (config.rate_control == "crf")
+        std::cout << " crf=" << config.crf;
+    else
+        std::cout << " bitrate=" << (config.bitrate / 1000) << " kbps";
+    std::cout << ", preset=" << config.preset
+              << ", tune=" << (config.tune.empty() ? "(none)" : config.tune)
+              << ", hw_encoder=" << (config.hw_encoder.empty() ? "(none)" : config.hw_encoder)
+              << ", pixel_format=" << config.pixel_format
+              << ", max_queue_frames=" << config.max_queue_frames
+              << ", include_cursor=" << (config.include_cursor ? "true" : "false")
+              << "\n";
+    std::cout << "Audio settings: " << config.sample_rate << " Hz, "
+              << config.channels << " ch, "
+              << (config.audio_bitrate / 1000) << " kbps, device="
+              << config.audio_device << "\n";
 
-    int64_t numSeconds = 30;
-    PacketBuffer buffer(numSeconds);
+    PacketBuffer buffer(config.buffer_seconds);
     AudioEncoder audioEncoder(buffer);
     VideoEncoder videoEncoder(buffer);
 
     ReplayWriter writer;
 
-    // Set up Unix Domain Socket for triggering replay saves
-    std::string socket_path = "/tmp/videoflashback.sock";
+    const std::string socket_path = expand_user_path(config.socket_path);
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (server_fd >= 0) {
         int flags = fcntl(server_fd, F_GETFL, 0);
@@ -111,6 +157,8 @@ int main()
         return 1;
     }
 
+    screen.set_include_cursor(config.include_cursor);
+
     uint32_t node = screen.start();
     if (!node) {
         if (server_fd >= 0) { close(server_fd); unlink(socket_path.c_str()); }
@@ -128,6 +176,7 @@ int main()
         return 1;
     }
 
+    videoCapture.set_preferred_pixel_format(config.pixel_format);
     videoCapture.set_callback(
         [&videoEncoder](const uint8_t* data,
         uint32_t width,
@@ -150,7 +199,13 @@ int main()
         });
     videoCapture.connect_to_node(node);
 
-    audioEncoder.initialize(config.sample_rate, 2);
+    if (!audioEncoder.initialize(
+            config.sample_rate,
+            config.channels,
+            config.audio_bitrate)) {
+        if (server_fd >= 0) { close(server_fd); unlink(socket_path.c_str()); }
+        return 1;
+    }
 
     AudioCapture audioCapture;
     if (!audioCapture.initialize()) {
@@ -160,7 +215,7 @@ int main()
 
     audioCapture.set_preferred_format(
         static_cast<uint32_t>(config.sample_rate),
-        2);
+        static_cast<uint32_t>(config.channels));
 
     audioCapture.set_callback(
         [&audioEncoder, &config](const float* data,
@@ -170,7 +225,7 @@ int main()
 
             RawAudioFrame frame;
 
-            frame.channels = channels;
+            frame.channels = static_cast<int>(channels);
             frame.sampleRate = config.sample_rate;
             frame.timestamp_ns = timestamp;
 
@@ -181,22 +236,15 @@ int main()
             audioEncoder.push(std::move(frame));
         });
 
-    uint32_t audio_node = PW_ID_ANY;
-    uint32_t default_sink = get_default_sink_id();
-    if (default_sink != 0) {
-        audio_node = default_sink;
-        std::cout << "Targeting default audio sink monitor (node ID: " << default_sink << ")\n";
-    } else {
-        std::cout << "Could not detect default sink ID, falling back to default capture source.\n";
-    }
-    audioCapture.connect_to_node(audio_node);
+    audioCapture.connect_to_node(resolve_audio_node(config));
 
     bool running = true;
-    std::cout << "Service capture started. Use flashback-trigger to save the last 30s.\n";
+    std::cout << "Service capture started. Use flashback-trigger to save the last "
+              << config.buffer_seconds << "s.\n";
     while (running) {
         audioCapture.update();
         videoCapture.update();
-        
+
         bool triggered = false;
         if (server_fd >= 0) {
             int client_fd = accept(server_fd, nullptr, nullptr);
@@ -216,7 +264,8 @@ int main()
                 std::cerr << "Could not build capture path; skipping save\n";
             } else {
                 std::cout << "Trigger command received! Writing " << path << "...\n";
-                writer.write(path, buffer);
+                if (writer.write(path, buffer))
+                    run_notify_command(config, path);
             }
         }
 

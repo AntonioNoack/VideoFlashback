@@ -55,7 +55,10 @@ bool ScreenCast::initialize()
     return true;
 }
 
-
+void ScreenCast::set_include_cursor(bool enabled)
+{
+    include_cursor = enabled;
+}
 
 ScreenCast::~ScreenCast()
 {
@@ -430,15 +433,9 @@ bool ScreenCast::select_sources()
         "{sv}",
         &options);
 
-    dbus_message_iter_close_container(
-        &args,
-        &options);
-
-    // types = monitor + window
-    /*{
-        const char* key = "types";
-        uint32_t value = 1;
-
+    auto add_uint_option =
+        [&](const char* key, uint32_t value)
+    {
         DBusMessageIter entry;
         DBusMessageIter variant;
 
@@ -448,12 +445,10 @@ bool ScreenCast::select_sources()
             nullptr,
             &entry);
 
-
         dbus_message_iter_append_basic(
             &entry,
             DBUS_TYPE_STRING,
             &key);
-
 
         dbus_message_iter_open_container(
             &entry,
@@ -461,24 +456,28 @@ bool ScreenCast::select_sources()
             "u",
             &variant);
 
-
         dbus_message_iter_append_basic(
             &variant,
             DBUS_TYPE_UINT32,
             &value);
 
-
         dbus_message_iter_close_container(
             &entry,
             &variant);
 
-
         dbus_message_iter_close_container(
             &options,
             &entry);
-    }*/
+    };
 
+    // 1 = Hidden, 2 = Embedded in the video stream
+    add_uint_option(
+        "cursor_mode",
+        include_cursor ? 2u : 1u);
 
+    dbus_message_iter_close_container(
+        &args,
+        &options);
 
     DBusMessage* reply =
         dbus_connection_send_with_reply_and_block(
@@ -516,7 +515,9 @@ bool ScreenCast::select_sources()
 
 
     std::cout
-        << "Source selection completed\n";
+        << "Source selection completed (cursor "
+        << (include_cursor ? "embedded" : "hidden")
+        << ")\n";
 
 
     dbus_message_unref(response);

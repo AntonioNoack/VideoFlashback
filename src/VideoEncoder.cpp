@@ -12,6 +12,7 @@ extern "C"
 #include <libswscale/swscale.h>
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
+#include <libavutil/pixfmt.h>
 }
 
 VideoEncoder::VideoEncoder(
@@ -44,15 +45,41 @@ static AVCodecID codec_id_from_name(const std::string& name)
     return AV_CODEC_ID_NONE;
 }
 
+static AVPixelFormat av_pixel_format_from_name(const std::string& name)
+{
+    const std::string lower = to_lower(name);
+    if (lower == "bgra")
+        return AV_PIX_FMT_BGRA;
+    if (lower == "rgba")
+        return AV_PIX_FMT_RGBA;
+    if (lower == "bgr0" || lower == "bgrx")
+        return AV_PIX_FMT_BGR0;
+    if (lower == "rgb0" || lower == "rgbx")
+        return AV_PIX_FMT_RGB0;
+    if (lower == "argb")
+        return AV_PIX_FMT_ARGB;
+    if (lower == "abgr")
+        return AV_PIX_FMT_ABGR;
+    return AV_PIX_FMT_NONE;
+}
+
 bool VideoEncoder::configure(const Config& config)
 {
     settings = config;
     configured = true;
 
-    if (codec_id_from_name(settings.encoding) == AV_CODEC_ID_NONE)
+    if (settings.hw_encoder.empty() &&
+        codec_id_from_name(settings.encoding) == AV_CODEC_ID_NONE)
     {
         std::cerr << "Unsupported encoding '" << settings.encoding
-                  << "'; use h264 or hevc\n";
+                  << "'; use h264 or hevc (or set hw_encoder)\n";
+        return false;
+    }
+
+    if (av_pixel_format_from_name(settings.pixel_format) == AV_PIX_FMT_NONE)
+    {
+        std::cerr << "Unsupported pixel_format '" << settings.pixel_format
+                  << "'; use bgra, rgba, bgr0, rgb0, argb, or abgr\n";
         return false;
     }
 
@@ -88,18 +115,34 @@ bool VideoEncoder::ensure_encoder(int src_w, int src_h)
         out_h = scale_h;
     }
 
-    // H.264/HEVC require even dimensions.
     out_w = std::max(2, out_w & ~1);
     out_h = std::max(2, out_h & ~1);
     encode_width = out_w;
     encode_height = out_h;
 
-    const AVCodecID codec_id = codec_id_from_name(settings.encoding);
-    const AVCodec* encoder = avcodec_find_encoder(codec_id);
-    if (!encoder)
+    const AVCodec* encoder = nullptr;
+    AVCodecID codec_id = AV_CODEC_ID_NONE;
+
+    if (!settings.hw_encoder.empty())
     {
-        std::cerr << "Encoder unavailable for " << settings.encoding << "\n";
-        return false;
+        encoder = avcodec_find_encoder_by_name(settings.hw_encoder.c_str());
+        if (!encoder)
+        {
+            std::cerr << "Hardware encoder '" << settings.hw_encoder
+                      << "' not found\n";
+            return false;
+        }
+        codec_id = encoder->id;
+    }
+    else
+    {
+        codec_id = codec_id_from_name(settings.encoding);
+        encoder = avcodec_find_encoder(codec_id);
+        if (!encoder)
+        {
+            std::cerr << "Encoder unavailable for " << settings.encoding << "\n";
+            return false;
+        }
     }
 
     codec = avcodec_alloc_context3(encoder);
@@ -114,19 +157,41 @@ bool VideoEncoder::ensure_encoder(int src_w, int src_h)
     codec->time_base = { 1, 90000 };
     codec->framerate = { settings.capture_fps, 1 };
     codec->pix_fmt = AV_PIX_FMT_YUV420P;
-    codec->bit_rate = settings.bitrate;
-    codec->gop_size = settings.capture_fps; // ~1s keyframes
     codec->max_b_frames = 0;
+    codec->gop_size = std::max(
+        1,
+        static_cast<int>(settings.capture_fps * settings.keyframe_interval_sec + 0.5));
+
+    const std::string rate_mode = to_lower(settings.rate_control);
+    if (rate_mode == "crf")
+    {
+        codec->bit_rate = 0;
+    }
+    else
+    {
+        codec->bit_rate = settings.bitrate;
+    }
 
     if (codec->priv_data)
     {
-        av_opt_set(codec->priv_data, "preset", settings.preset.c_str(), 0);
-        av_opt_set(codec->priv_data, "tune", "zerolatency", 0);
+        if (!settings.preset.empty())
+            av_opt_set(codec->priv_data, "preset", settings.preset.c_str(), 0);
+
+        if (!settings.tune.empty())
+            av_opt_set(codec->priv_data, "tune", settings.tune.c_str(), 0);
+
+        if (rate_mode == "crf")
+        {
+            // Works for libx264/libx265 and several hw wrappers that accept crf.
+            av_opt_set_int(codec->priv_data, "crf", settings.crf, 0);
+        }
     }
 
     if (avcodec_open2(codec, encoder, nullptr) < 0)
     {
-        std::cerr << "Failed to open video encoder\n";
+        std::cerr << "Failed to open video encoder"
+                  << (settings.hw_encoder.empty() ? "" : (" " + settings.hw_encoder))
+                  << "\n";
         avcodec_free_context(&codec);
         return false;
     }
@@ -148,10 +213,13 @@ bool VideoEncoder::ensure_encoder(int src_w, int src_h)
 
     ring.set_video_info(info);
 
+    const AVPixelFormat src_fmt =
+        av_pixel_format_from_name(settings.pixel_format);
+
     scaler = sws_getContext(
         source_width,
         source_height,
-        AV_PIX_FMT_BGRA,
+        src_fmt,
         encode_width,
         encode_height,
         AV_PIX_FMT_YUV420P,
@@ -171,10 +239,16 @@ bool VideoEncoder::ensure_encoder(int src_w, int src_h)
 
     std::cout << "Video encoder ready: capture "
               << source_width << "x" << source_height
-              << " -> encode " << encode_width << "x" << encode_height
+              << " (" << settings.pixel_format << ") -> encode "
+              << encode_width << "x" << encode_height
               << " @ " << settings.capture_fps << " fps, "
-              << settings.encoding << ", "
-              << (settings.bitrate / 1000) << " kbps\n";
+              << (settings.hw_encoder.empty() ? settings.encoding : settings.hw_encoder)
+              << ", rate_control=" << settings.rate_control;
+    if (rate_mode == "crf")
+        std::cout << " crf=" << settings.crf;
+    else
+        std::cout << " bitrate=" << (settings.bitrate / 1000) << " kbps";
+    std::cout << ", gop=" << codec->gop_size << "\n";
 
     return true;
 }
@@ -186,6 +260,13 @@ void VideoEncoder::push(RawVideoFrame frame)
 
     {
         std::lock_guard lock(mutex);
+
+        if (settings.max_queue_frames > 0)
+        {
+            while (static_cast<int>(frames.size()) >= settings.max_queue_frames)
+                frames.pop();
+        }
+
         frames.push(std::move(frame));
     }
 
@@ -229,7 +310,6 @@ void VideoEncoder::thread_main()
         if (frame.width <= 0 || frame.height <= 0)
             continue;
 
-        // Drop frames above the configured capture FPS.
         const int64_t min_interval_ns =
             1'000'000'000LL / std::max(1, settings.capture_fps);
         const int64_t ts = static_cast<int64_t>(frame.timestamp_ns);

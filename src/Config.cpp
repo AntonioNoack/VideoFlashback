@@ -31,6 +31,23 @@ static std::string default_config_path()
     return home + "/.config/videoflashback/config.toml";
 }
 
+static std::string replace_all(
+    std::string text,
+    const std::string& from,
+    const std::string& to)
+{
+    if (from.empty())
+        return text;
+
+    std::size_t pos = 0;
+    while ((pos = text.find(from, pos)) != std::string::npos)
+    {
+        text.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+    return text;
+}
+
 std::string expand_user_path(const std::string& path)
 {
     if (path.empty())
@@ -82,6 +99,38 @@ bool parse_scale(const std::string& scale, int& width, int& height)
     return width > 0 && height > 0;
 }
 
+static void load_string(const toml::table& table, const char* key, std::string& out)
+{
+    if (const auto* value = table[key].as_string())
+        out = value->get();
+}
+
+static void load_int(const toml::table& table, const char* key, int& out)
+{
+    if (const auto* value = table[key].as_integer())
+        out = static_cast<int>(value->get());
+}
+
+static void load_int64(const toml::table& table, const char* key, int64_t& out)
+{
+    if (const auto* value = table[key].as_integer())
+        out = value->get();
+}
+
+static void load_double(const toml::table& table, const char* key, double& out)
+{
+    if (const auto* value = table[key].as_floating_point())
+        out = value->get();
+    else if (const auto* value = table[key].as_integer())
+        out = static_cast<double>(value->get());
+}
+
+static void load_bool(const toml::table& table, const char* key, bool& out)
+{
+    if (const auto* value = table[key].as_boolean())
+        out = value->get();
+}
+
 Config load_config()
 {
     Config config;
@@ -105,54 +154,77 @@ Config load_config()
 
         if (const auto* output = table["output"].as_table())
         {
-            if (const auto* dir = (*output)["directory"].as_string())
-                config.output_directory = dir->get();
+            load_string(*output, "directory", config.output_directory);
+            load_string(*output, "filename_format", config.filename_format);
+            load_string(*output, "notify_command", config.notify_command);
+            load_string(*output, "socket_path", config.socket_path);
+        }
 
-            if (const auto* fmt = (*output)["filename_format"].as_string())
-                config.filename_format = fmt->get();
+        if (const auto* replay = table["replay"].as_table())
+        {
+            load_int(*replay, "buffer_seconds", config.buffer_seconds);
         }
 
         if (const auto* video = table["video"].as_table())
         {
-            if (const auto* fps = (*video)["capture_fps"].as_integer())
-                config.capture_fps = static_cast<int>(fps->get());
-
-            if (const auto* scale = (*video)["scale"].as_string())
-                config.scale = scale->get();
-
-            if (const auto* encoding = (*video)["encoding"].as_string())
-                config.encoding = encoding->get();
-
-            if (const auto* bitrate = (*video)["bitrate"].as_integer())
-                config.bitrate = bitrate->get();
-
-            if (const auto* preset = (*video)["preset"].as_string())
-                config.preset = preset->get();
+            load_int(*video, "capture_fps", config.capture_fps);
+            load_string(*video, "scale", config.scale);
+            load_string(*video, "encoding", config.encoding);
+            load_string(*video, "rate_control", config.rate_control);
+            load_int64(*video, "bitrate", config.bitrate);
+            load_int(*video, "crf", config.crf);
+            load_double(*video, "keyframe_interval_sec", config.keyframe_interval_sec);
+            load_string(*video, "preset", config.preset);
+            load_string(*video, "tune", config.tune);
+            load_string(*video, "hw_encoder", config.hw_encoder);
+            load_string(*video, "pixel_format", config.pixel_format);
+            load_int(*video, "max_queue_frames", config.max_queue_frames);
+            load_bool(*video, "include_cursor", config.include_cursor);
         }
 
         if (const auto* audio = table["audio"].as_table())
         {
-            if (const auto* rate = (*audio)["sample_rate"].as_integer())
-                config.sample_rate = static_cast<int>(rate->get());
+            load_int(*audio, "sample_rate", config.sample_rate);
+            load_int(*audio, "channels", config.channels);
+            load_int64(*audio, "bitrate", config.audio_bitrate);
+            load_string(*audio, "device", config.audio_device);
         }
 
-        if (config.capture_fps <= 0)
+        auto clamp_positive = [](int& value, int fallback, const char* name)
         {
-            std::cerr << "Invalid capture_fps; falling back to 60\n";
-            config.capture_fps = 60;
-        }
+            if (value <= 0)
+            {
+                std::cerr << "Invalid " << name << "; falling back to " << fallback << "\n";
+                value = fallback;
+            }
+        };
+
+        clamp_positive(config.capture_fps, 60, "capture_fps");
+        clamp_positive(config.buffer_seconds, 30, "buffer_seconds");
+        clamp_positive(config.sample_rate, 48000, "sample_rate");
+        clamp_positive(config.channels, 2, "channels");
+        clamp_positive(config.crf, 23, "crf");
 
         if (config.bitrate <= 0)
         {
             std::cerr << "Invalid bitrate; falling back to 12000000\n";
             config.bitrate = 12'000'000;
         }
-
-        if (config.sample_rate <= 0)
+        if (config.audio_bitrate <= 0)
         {
-            std::cerr << "Invalid sample_rate; falling back to 48000\n";
-            config.sample_rate = 48000;
+            std::cerr << "Invalid audio bitrate; falling back to 128000\n";
+            config.audio_bitrate = 128000;
         }
+        if (config.keyframe_interval_sec <= 0.0)
+        {
+            std::cerr << "Invalid keyframe_interval_sec; falling back to 1.0\n";
+            config.keyframe_interval_sec = 1.0;
+        }
+        if (config.max_queue_frames < 0)
+            config.max_queue_frames = 0;
+
+        if (config.socket_path.empty())
+            config.socket_path = "/tmp/videoflashback.sock";
 
         std::cout << "Loaded config from " << path << "\n";
     }
@@ -206,4 +278,23 @@ std::string make_capture_path(const Config& config)
     }
 
     return (fs::path(directory) / filename).string();
+}
+
+void run_notify_command(const Config& config, const std::string& saved_path)
+{
+    if (config.notify_command.empty())
+        return;
+
+    const fs::path path(saved_path);
+    std::string command = config.notify_command;
+    command = replace_all(command, "%f", saved_path);
+    command = replace_all(command, "%d", path.parent_path().string());
+    command = replace_all(command, "%n", path.filename().string());
+
+    const int status = std::system(command.c_str());
+    if (status != 0)
+    {
+        std::cerr << "notify_command exited with status " << status
+                  << ": " << command << "\n";
+    }
 }

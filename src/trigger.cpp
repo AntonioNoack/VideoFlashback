@@ -1,10 +1,15 @@
+#include "Config.hpp"
+
 #include <iostream>
+#include <cstring>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <cstring>
 
 int main() {
+    const Config config = load_config();
+    const std::string socket_path = expand_user_path(config.socket_path);
+
     int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_fd < 0) {
         std::cerr << "Failed to create socket\n";
@@ -13,10 +18,11 @@ int main() {
 
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    std::strncpy(addr.sun_path, "/tmp/videoflashback.sock", sizeof(addr.sun_path) - 1);
+    std::strncpy(addr.sun_path, socket_path.c_str(), sizeof(addr.sun_path) - 1);
 
     if (connect(client_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-        std::cerr << "Failed to connect to VideoFlashback service. Is it running?\n";
+        std::cerr << "Failed to connect to VideoFlashback service at "
+                  << socket_path << ". Is it running?\n";
         close(client_fd);
         return 1;
     }

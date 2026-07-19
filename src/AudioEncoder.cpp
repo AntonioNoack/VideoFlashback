@@ -25,7 +25,8 @@ AudioEncoder::~AudioEncoder()
 
 bool AudioEncoder::initialize(
     int sampleRate,
-    int channels)
+    int channels,
+    int64_t bitrate)
 {
     const AVCodec* encoder =
         avcodec_find_encoder(
@@ -47,7 +48,7 @@ bool AudioEncoder::initialize(
 
     codec->sample_rate = sampleRate;
     codec->sample_fmt = AV_SAMPLE_FMT_FLTP; // Planar float
-    codec->bit_rate = 128000;
+    codec->bit_rate = bitrate;
     codec->time_base = { 1, sampleRate };
 
     // Set channel layout using FFmpeg 6.x API

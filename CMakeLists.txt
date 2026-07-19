@@ -62,4 +62,11 @@ target_link_libraries(flashback-server PRIVATE
     tomlplusplus::tomlplusplus
 )
 
-add_executable(flashback-trigger src/trigger.cpp)
+add_executable(flashback-trigger
+    src/trigger.cpp
+    src/Config.cpp
+)
+
+target_link_libraries(flashback-trigger PRIVATE
+    tomlplusplus::tomlplusplus
+)

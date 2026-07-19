@@ -1,6 +1,6 @@
 # VideoFlashback
 
-VideoFlashback is a compact gameplay replay recorder for Linux. It continuously captures screen and audio via PipeWire, keeps the last 30 seconds in memory, and writes an MP4 when you fire the trigger.
+VideoFlashback is a compact gameplay replay recorder for Linux. It continuously captures screen and audio via PipeWire, keeps a sliding buffer in memory, and writes an MP4 when you fire the trigger.
 
 It works like Windows Game Bar (`Win + G`): a background server records into a ring buffer, and a separate trigger program saves a clip on demand.
 
@@ -8,7 +8,7 @@ It works like Windows Game Bar (`Win + G`): a background server records into a r
 
 | Component | Role |
 | --- | --- |
-| `flashback-server` | Runs in the background. Captures video/audio, encodes H.264/AAC, and holds a 30-second in-memory buffer. Listens on `/tmp/videoflashback.sock`. |
+| `flashback-server` | Runs in the background. Captures video/audio, encodes, and holds the ring buffer. Listens on a Unix socket (default `/tmp/videoflashback.sock`). |
 | `flashback-trigger` | Connects to that socket and tells the server to save a clip. Bind this binary to a global shortcut in your desktop environment. |
 
 By default, clips are written to `~/Videos/Captures/` with names like `2024-10-29 17-08-18.mp4`.
@@ -72,33 +72,52 @@ You can also run the trigger manually:
 
 ## Configuration
 
-Optional TOML config (created on demand; missing file uses defaults):
+Optional TOML config (missing file uses defaults):
 
 `~/.config/videoflashback/config.toml`
 
 or `$XDG_CONFIG_HOME/videoflashback/config.toml`
 
-Example (see also `config.example.toml` in the repo):
+See `config.example.toml` for the full set. Summary:
 
 ```toml
 [output]
 directory = "~/Videos/Captures"
 filename_format = "%Y-%m-%d %H-%M-%S.mp4"
+notify_command = "notify-send 'VideoFlashback' 'Saved %n'"
+socket_path = "/tmp/videoflashback.sock"
+
+[replay]
+buffer_seconds = 30
 
 [video]
 capture_fps = 60
-scale = "native"          # or "1920x1080"
-encoding = "h264"         # or "hevc"
-bitrate = 12000000        # bits per second
+scale = "native"              # or "1920x1080"
+encoding = "h264"             # or "hevc"
+rate_control = "bitrate"      # or "crf"
+bitrate = 12000000
+crf = 23
+keyframe_interval_sec = 1.0
 preset = "veryfast"
+tune = "zerolatency"          # empty string to disable
+hw_encoder = ""               # e.g. "h264_nvenc", "h264_vaapi"
+pixel_format = "bgra"
+max_queue_frames = 120
+include_cursor = true
 
 [audio]
 sample_rate = 48000
+channels = 2
+bitrate = 128000
+device = "default"            # or a PipeWire node id
 ```
 
-`filename_format` is a [`strftime`](https://man7.org/linux/man-pages/man3/strftime.3.html) pattern. The destination directory is created automatically if it does not exist.
+Notes:
 
-Encode resolution is taken from the PipeWire capture size when `scale = "native"`. Set `scale` to a `WIDTHxHEIGHT` string to rescale before encoding.
+- `filename_format` uses [`strftime`](https://man7.org/linux/man-pages/man3/strftime.3.html).
+- `notify_command` placeholders: `%f` full path, `%d` directory, `%n` filename.
+- Encode resolution comes from the PipeWire capture when `scale = "native"`.
+- `flashback-trigger` reads the same config for `socket_path`.
 
 ## Notes
 

@@ -8,6 +8,17 @@ directory = "~/Videos/Captures"
 # Default example: 2024-10-29 17-08-18.mp4
 filename_format = "%Y-%m-%d %H-%M-%S.mp4"
 
+# Optional shell command after a successful save.
+# Placeholders: %f = full path, %d = directory, %n = filename.
+# notify_command = "notify-send 'VideoFlashback' 'Saved %n'"
+
+# Unix socket used by flashback-server / flashback-trigger.
+socket_path = "/tmp/videoflashback.sock"
+
+[replay]
+# How many seconds of A/V to keep in the ring buffer.
+buffer_seconds = 30
+
 [video]
 # Encode at most this many frames per second (extras from PipeWire are dropped).
 capture_fps = 60
@@ -16,15 +27,39 @@ capture_fps = 60
 # Otherwise WIDTHxHEIGHT, e.g. "1920x1080".
 scale = "native"
 
-# Codec: "h264" or "hevc" (alias "h265").
+# Software codec when hw_encoder is empty: "h264" or "hevc".
 encoding = "h264"
 
-# Target bitrate in bits per second (e.g. 12000000 = 12 Mbps).
+# "bitrate" (use bitrate=) or "crf" (use crf=).
+rate_control = "bitrate"
 bitrate = 12000000
+crf = 23
 
-# Encoder preset (veryfast, fast, medium, slow, ...).
+# Keyframe spacing in seconds (~1 keyframe per this many seconds).
+keyframe_interval_sec = 1.0
+
+# Encoder preset / tune (empty tune disables it).
 preset = "veryfast"
+tune = "zerolatency"
+
+# Optional hardware encoder name (overrides software `encoding`), e.g.:
+# "h264_nvenc", "h264_vaapi", "hevc_nvenc", "hevc_vaapi"
+hw_encoder = ""
+
+# Preferred PipeWire / scaler pixel format:
+# bgra, rgba, bgr0, rgb0, argb, abgr
+pixel_format = "bgra"
+
+# Drop oldest pending frames when the encode queue exceeds this (0 = unlimited).
+max_queue_frames = 120
+
+# Embed the mouse cursor in the portal screen cast stream.
+include_cursor = true
 
 [audio]
-# Capture/encode sample rate in Hz.
 sample_rate = 48000
+channels = 2
+bitrate = 128000
+
+# "default"/"auto" = detect default sink via wpctl, or a PipeWire node id.
+device = "default"

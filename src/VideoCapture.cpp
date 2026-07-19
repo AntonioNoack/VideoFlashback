@@ -1,7 +1,10 @@
 #include <chrono>
+#include <cctype>
 #include <iostream>
+#include <string>
 
 #include <spa/param/video/format-utils.h>
+#include <spa/pod/builder.h>
 #include <pipewire/pipewire.h>
 
 #include "VideoCapture.hpp"
@@ -389,6 +392,22 @@ bool VideoCapture::connect_to_node(
     if (!stream)
         return false;
 
+    uint8_t buffer[1024];
+    spa_pod_builder builder =
+        SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
+
+    const spa_pod* params[1] = {
+        static_cast<spa_pod*>(spa_pod_builder_add_object(
+            &builder,
+            SPA_TYPE_OBJECT_Format,
+            SPA_PARAM_EnumFormat,
+            SPA_FORMAT_mediaType,
+            SPA_POD_Id(SPA_MEDIA_TYPE_video),
+            SPA_FORMAT_mediaSubtype,
+            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+            SPA_FORMAT_VIDEO_format,
+            SPA_POD_Id(preferred_format)))
+    };
 
     int result =
         pw_stream_connect(
@@ -398,8 +417,8 @@ bool VideoCapture::connect_to_node(
             static_cast<pw_stream_flags>(
                 PW_STREAM_FLAG_AUTOCONNECT |
                 PW_STREAM_FLAG_MAP_BUFFERS),
-            nullptr,
-            0);
+            params,
+            1);
 
 
     if (result < 0)
@@ -418,6 +437,34 @@ bool VideoCapture::connect_to_node(
 
 
     return true;
+}
+
+void VideoCapture::set_preferred_pixel_format(
+    const std::string& name)
+{
+    std::string lower;
+    lower.reserve(name.size());
+    for (char c : name)
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+
+    if (lower == "bgra")
+        preferred_format = SPA_VIDEO_FORMAT_BGRA;
+    else if (lower == "rgba")
+        preferred_format = SPA_VIDEO_FORMAT_RGBA;
+    else if (lower == "bgr0" || lower == "bgrx")
+        preferred_format = SPA_VIDEO_FORMAT_BGRx;
+    else if (lower == "rgb0" || lower == "rgbx")
+        preferred_format = SPA_VIDEO_FORMAT_RGBx;
+    else if (lower == "argb")
+        preferred_format = SPA_VIDEO_FORMAT_ARGB;
+    else if (lower == "abgr")
+        preferred_format = SPA_VIDEO_FORMAT_ABGR;
+    else
+    {
+        std::cerr << "Unknown pixel_format '" << name
+                  << "'; keeping BGRA\n";
+        preferred_format = SPA_VIDEO_FORMAT_BGRA;
+    }
 }
 
 void VideoCapture::set_callback(
