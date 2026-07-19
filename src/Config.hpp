@@ -28,8 +28,10 @@ struct Config
     std::string preset = "veryfast";
     // Empty disables tune. Default matches low-latency replay.
     std::string tune = "zerolatency";
-    // Empty = software encoder from `encoding`. Else FFmpeg name, e.g. h264_nvenc.
-    std::string hw_encoder;
+    // Empty / "auto" = pick first working HW encoder, else software.
+    // "software" / "none" / "off" = force CPU encode.
+    // Else an FFmpeg encoder name, e.g. h264_nvenc.
+    std::string hw_encoder = "auto";
     std::string pixel_format = "bgra";
     // Drop oldest pending frames when the encode queue exceeds this (0 = unlimited).
     int max_queue_frames = 120;

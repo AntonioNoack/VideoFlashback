@@ -42,9 +42,11 @@ keyframe_interval_sec = 1.0
 preset = "veryfast"
 tune = "zerolatency"
 
-# Optional hardware encoder name (overrides software `encoding`), e.g.:
-# "h264_nvenc", "h264_vaapi", "hevc_nvenc", "hevc_vaapi"
-hw_encoder = ""
+# Optional hardware encoder:
+#   "auto"       = VAAPI (AMD/Intel) → NVENC (if CUDA) → AMF → software
+#   "software"   = force CPU encode
+#   "h264_vaapi", "h264_nvenc", ... = force a specific FFmpeg encoder
+hw_encoder = "auto"
 
 # Preferred PipeWire / scaler pixel format:
 # bgra, rgba, bgr0, rgb0, argb, abgr

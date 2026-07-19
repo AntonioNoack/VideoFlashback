@@ -109,7 +109,7 @@ int main()
         std::cout << " bitrate=" << (config.bitrate / 1000) << " kbps";
     std::cout << ", preset=" << config.preset
               << ", tune=" << (config.tune.empty() ? "(none)" : config.tune)
-              << ", hw_encoder=" << (config.hw_encoder.empty() ? "(none)" : config.hw_encoder)
+              << ", hw_encoder=" << config.hw_encoder
               << ", pixel_format=" << config.pixel_format
               << ", max_queue_frames=" << config.max_queue_frames
               << ", include_cursor=" << (config.include_cursor ? "true" : "false")

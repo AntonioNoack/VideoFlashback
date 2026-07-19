@@ -8,9 +8,11 @@
 #include <mutex>
 #include <queue>
 #include <condition_variable>
+#include <vector>
 
 
 struct AVCodecContext;
+struct AVBufferRef;
 struct SwsContext;
 
 
@@ -43,6 +45,7 @@ private:
 
     void thread_main() override;
     bool ensure_encoder(int source_width, int source_height);
+    void release_encoder();
 
 private:
 
@@ -52,10 +55,13 @@ private:
 
     AVCodecContext* codec = nullptr;
     SwsContext* scaler = nullptr;
+    AVBufferRef* hw_device_ctx = nullptr;
+    AVBufferRef* hw_frames_ctx = nullptr;
 
     Config settings;
     bool configured = false;
     bool encoder_ready = false;
+    bool use_vaapi = false;
 
     int source_width = 0;
     int source_height = 0;
