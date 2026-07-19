@@ -171,10 +171,28 @@ bool ReplayWriter::write(
 
     int64_t index = 0;
 
-
+    // Anchor the file timeline on the first video keyframe so audio-leading
+    // packets cannot shift video PTS negative (muxer drops them → black video).
     int64_t first_pts = AV_NOPTS_VALUE;
     int64_t first_dts = AV_NOPTS_VALUE;
+    for (const auto& input : packets)
+    {
+        if (input.type == StreamType::Video && input.keyframe)
+        {
+            first_pts = input.pts;
+            first_dts = (input.dts == AV_NOPTS_VALUE) ? input.pts : input.dts;
+            break;
+        }
+    }
 
+    if (first_pts == AV_NOPTS_VALUE)
+    {
+        std::cerr << "No video keyframe in snapshot\n";
+        if (!(format->oformat->flags & AVFMT_NOFILE))
+            avio_closep(&format->pb);
+        avformat_free_context(format);
+        return false;
+    }
 
     for (const auto& input : packets)
     {
@@ -192,20 +210,22 @@ bool ReplayWriter::write(
             continue; // Skip unknown stream types or if audio is disabled
         }
 
+        // Drop anything before the keyframe epoch (avoids negative PTS).
+        if (input.pts < first_pts)
+            continue;
+
         AVPacket* packet = av_packet_alloc();
 
         packet->data = const_cast<uint8_t*>(input.data.data());
         packet->size = input.data.size();
         packet->stream_index = target_stream->index;
 
-        if (first_pts == AV_NOPTS_VALUE)
-        {
-            first_pts = input.pts;
-            first_dts = input.dts;
-        }
-
         int64_t relative_pts = input.pts - first_pts;
-        int64_t relative_dts = (input.dts == AV_NOPTS_VALUE) ? relative_pts : (input.dts - first_dts);
+        int64_t relative_dts = (input.dts == AV_NOPTS_VALUE)
+            ? relative_pts
+            : (input.dts - first_dts);
+        if (relative_dts < 0)
+            relative_dts = relative_pts;
 
         // Rescale PTS/DTS from unified 90000 timebase to target stream timebase
         packet->pts = av_rescale_q(

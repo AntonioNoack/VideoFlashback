@@ -1,5 +1,6 @@
 #include "PacketBuffer.hpp"
 
+#include <algorithm>
 #include <iostream>
 
 PacketBuffer::PacketBuffer(int64_t duration_seconds)
@@ -19,7 +20,8 @@ void PacketBuffer::push(
         << packet.data.size()
         << " bytes\n";
 
-    newest_pts = packet.pts;
+    // Keep the high-water mark; late video packets can arrive with older PTS.
+    newest_pts = std::max(newest_pts, packet.pts);
     packets.push_back(std::move(packet));
 
     trim();
@@ -43,18 +45,32 @@ PacketBuffer::snapshot()
 {
     std::lock_guard lock(mutex);
 
-
+    // Must start on a *video* keyframe. Audio packets are also marked as
+    // keyframes (AAC), so treating any keyframe as a cut point leaves the
+    // video track starting mid-GOP → black picture after the first save.
     auto start = packets.begin();
     while (start != packets.end() &&
-        !start->keyframe)
+           !(start->type == StreamType::Video && start->keyframe))
     {
         ++start;
     }
 
-    return {
-        start,
-        packets.end()
-    };
+    if (start == packets.end())
+        return {};
+
+    const int64_t start_pts = start->pts;
+
+    // Include A/V packets that belong at/after this keyframe's timeline,
+    // even if a late-encoded older packet sits after it in the deque.
+    std::vector<EncodedPacket> out;
+    out.reserve(static_cast<size_t>(std::distance(start, packets.end())));
+    for (auto it = start; it != packets.end(); ++it)
+    {
+        if (it->pts >= start_pts)
+            out.push_back(*it);
+    }
+
+    return out;
 }
 
 void PacketBuffer::set_video_info(

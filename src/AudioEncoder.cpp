@@ -123,7 +123,7 @@ void AudioEncoder::thread_main()
         }
 
         if (first_timestamp_ns < 0) {
-            first_timestamp_ns = frame.timestamp_ns;
+            first_timestamp_ns = static_cast<int64_t>(frame.timestamp_ns);
         }
 
         // Buffer the samples

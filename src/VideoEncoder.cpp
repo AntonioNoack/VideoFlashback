@@ -186,14 +186,15 @@ void VideoEncoder::thread_main()
             avframe->linesize);
 
         if (first_timestamp_ns < 0) {
-            first_timestamp_ns = frame.timestamp_ns;
+            first_timestamp_ns = static_cast<int64_t>(frame.timestamp_ns);
         }
 
-        int64_t relative_ns = frame.timestamp_ns - first_timestamp_ns;
+        int64_t relative_ns =
+            static_cast<int64_t>(frame.timestamp_ns) - first_timestamp_ns;
 
         avframe->pts = av_rescale_q(
             relative_ns,
-            AVRational{1,1000000000},
+            AVRational{1, 1000000000},
             codec->time_base);
 
         // std::cout << "pts: " << avframe->pts << std::endl;

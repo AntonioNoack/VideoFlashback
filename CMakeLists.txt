@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(ReplayRecorder)
+project(VideoFlashback)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,7 @@ pkg_check_modules(DBUS REQUIRED dbus-1)
 pkg_check_modules(SWSCALE REQUIRED libswscale)
 
 
-add_executable(replay
+add_executable(flashback-server
     src/main.cpp
     src/AudioCapture.cpp
     src/AudioEncoder.cpp
@@ -32,7 +32,7 @@ add_executable(replay
     src/Hotkey.cpp
 )
 
-target_include_directories(replay PRIVATE
+target_include_directories(flashback-server PRIVATE
     ${PIPEWIRE_INCLUDE_DIRS}
     ${DBUS_INCLUDE_DIRS}
     ${AVCODEC_INCLUDE_DIRS}
@@ -41,7 +41,7 @@ target_include_directories(replay PRIVATE
     ${X11_INCLUDE_DIR}
 )
 
-target_link_libraries(replay PRIVATE
+target_link_libraries(flashback-server PRIVATE
     ${PIPEWIRE_LIBRARIES}
     ${DBUS_LIBRARIES}
     ${AVCODEC_LIBRARIES}
@@ -52,4 +52,4 @@ target_link_libraries(replay PRIVATE
     Threads::Threads
 )
 
-add_executable(replay-trigger src/trigger.cpp)
+add_executable(flashback-trigger src/trigger.cpp)
